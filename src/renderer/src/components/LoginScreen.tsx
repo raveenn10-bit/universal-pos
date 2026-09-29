@@ -75,7 +75,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       if (api?.auth?.loginWithPin) {
         const session = await api.auth.loginWithPin(pinValue);
         onLoginSuccess(session);
-      } else if (pinValue === '2003' || pinValue === '1234') {
+      } else if (pinValue === '2003') {
         onLoginSuccess({
           userId: 'usr_harshapex_owner',
           username: 'harshapex',
@@ -83,6 +83,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           role: 'owner',
           token: 'active_production_token',
           permissions: ['*'],
+        });
+      } else if (pinValue === '1234') {
+        onLoginSuccess({
+          userId: 'usr_harshapex_cashier',
+          username: 'cashier',
+          fullName: 'Front-desk Cashier',
+          role: 'cashier',
+          token: 'cashier_production_token',
+          permissions: ['pos.billing', 'customers.manage', 'shifts.drawer'],
         });
       } else {
         setErrorMessage('Invalid 4-digit security PIN.');

@@ -25,6 +25,7 @@ import { DevicePassportModal } from './components/DevicePassportModal';
 import { CommandPalette } from './components/CommandPalette';
 import { LoginScreen } from './components/LoginScreen';
 import { UserSession, BusinessProfileConfig } from '../../shared/types';
+import { hasPermission, TAB_PERMISSIONS } from '../../shared/permissions';
 import { 
   Zap, 
   Package, 
@@ -37,8 +38,37 @@ import {
   Wrench,
   RefreshCw,
   ShieldCheck,
+  ShieldAlert,
   ArrowRight
 } from 'lucide-react';
+
+const ALL_TABS: NavTab[] = [
+  'dashboard',
+  'checkout',
+  'orders',
+  'customers',
+  'shifts',
+  'products',
+  'purchases',
+  'expenses',
+  'repairs',
+  'tradein',
+  'staff',
+  'reports',
+  'templates',
+  'settings',
+];
+
+const getFirstPermittedTab = (u: UserSession | null): NavTab => {
+  if (!u) return 'checkout';
+  for (const tab of ALL_TABS) {
+    const required = TAB_PERMISSIONS[tab];
+    if (!required || hasPermission(u, required)) {
+      return tab;
+    }
+  }
+  return 'checkout';
+};
 
 export const App: React.FC = () => {
   const [isProvisioned, setIsProvisioned] = useState<boolean | null>(null);
@@ -143,6 +173,10 @@ export const App: React.FC = () => {
           try {
             const session = await api.auth.login({ username: 'harshapex', password: 'chami2003' });
             setUser(session);
+            const required = TAB_PERMISSIONS[currentTab];
+            if (required && !hasPermission(session, required)) {
+              setCurrentTab(getFirstPermittedTab(session));
+            }
           } catch {
             setUser(null);
           }
@@ -180,9 +214,30 @@ export const App: React.FC = () => {
   };
 
   const handleLogout = () => {
-    // Normal logout: keeps hasUsers=true and shows LoginScreen
+    if (user?.token) {
+      const api = (window as any).apexApi;
+      if (api?.auth?.logout) {
+        api.auth.logout(user.token).catch(() => {});
+      }
+    }
+    localStorage.removeItem('apex_token');
     setUser(null);
   };
+
+  // Synchronize token and auto-redirect to permitted tab when user session changes
+  useEffect(() => {
+    if (user) {
+      if (user.token) {
+        localStorage.setItem('apex_token', user.token);
+      }
+      const required = TAB_PERMISSIONS[currentTab];
+      if (required && !hasPermission(user, required)) {
+        setCurrentTab(getFirstPermittedTab(user));
+      }
+    } else {
+      localStorage.removeItem('apex_token');
+    }
+  }, [user]);
 
   const handleUnlockTerminal = async (code: string): Promise<boolean> => {
     try {
@@ -222,6 +277,10 @@ export const App: React.FC = () => {
             setStoreBranding(res.branding);
             setIsProvisioned(true);
             setHasUsers(true);
+            const required = TAB_PERMISSIONS[currentTab];
+            if (required && !hasPermission(res.session, required)) {
+              setCurrentTab(getFirstPermittedTab(res.session));
+            }
             loadDashboardMetrics();
           }}
         />
@@ -236,6 +295,13 @@ export const App: React.FC = () => {
         <LoginScreen
           onLoginSuccess={(session) => {
             setUser(session);
+            if (session.token) {
+              localStorage.setItem('apex_token', session.token);
+            }
+            const required = TAB_PERMISSIONS[currentTab];
+            if (required && !hasPermission(session, required)) {
+              setCurrentTab(getFirstPermittedTab(session));
+            }
             loadDashboardMetrics();
           }}
           isDark={isDark}
@@ -260,15 +326,37 @@ export const App: React.FC = () => {
         appLogo={storeBranding?.appLogo}
         profileConfig={profileConfig}
         onLockScreen={() => setIsLocked(true)}
+        user={user}
       />
 
       {/* Main Content Workspace */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {currentTab === 'checkout' ? (
+        {currentTab !== 'checkout' && !hasPermission(user, TAB_PERMISSIONS[currentTab]) ? (
+          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center select-none bg-slate-50 dark:bg-slate-900">
+            <div className="w-16 h-16 rounded-3xl bg-rose-50 dark:bg-rose-950/40 text-rose-500 border border-rose-200 dark:border-rose-900/60 flex items-center justify-center mb-4 shadow-lg shadow-rose-500/10">
+              <ShieldAlert size={36} />
+            </div>
+            <h2 className="text-xl font-black text-slate-900 dark:text-white mb-2">Access Restricted</h2>
+            <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mb-6 leading-relaxed">
+              Your role (<strong className="text-slate-700 dark:text-slate-200 uppercase">{user.role}</strong>) does not have permission to view the <span className="font-bold capitalize">{currentTab}</span> workspace. Please contact your system administrator or switch to an authorized workspace.
+            </p>
+            <button
+              onClick={() => setCurrentTab(getFirstPermittedTab(user))}
+              className="flex items-center gap-2 bg-[#1a4cd2] hover:bg-blue-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-md shadow-blue-500/20 transition-all cursor-pointer"
+            >
+              <span>Return to {getFirstPermittedTab(user) === 'checkout' ? 'Fast Checkout' : 'Authorized Workspace'}</span>
+              <ArrowRight size={14} />
+            </button>
+          </div>
+        ) : currentTab === 'checkout' ? (
           <FastCheckoutScreen
             onBackToDashboard={() => {
-              setCurrentTab('dashboard');
-              loadDashboardMetrics();
+              if (hasPermission(user, TAB_PERMISSIONS.dashboard)) {
+                setCurrentTab('dashboard');
+                loadDashboardMetrics();
+              } else {
+                setCurrentTab(getFirstPermittedTab(user));
+              }
             }}
             token={user.token}
             profileConfig={profileConfig}
@@ -327,63 +415,77 @@ export const App: React.FC = () => {
               {/* Apple Vision Style Quick Actions Bar */}
               <div className="bg-white dark:bg-slate-800 rounded-3xl p-4 shadow-sm border border-slate-100 dark:border-slate-700 flex items-center justify-between gap-3 overflow-x-auto">
                 <div className="flex items-center gap-2.5">
-                  <button
-                    onClick={() => setCurrentTab('checkout')}
-                    className="flex items-center gap-2 bg-[#1a4cd2] hover:bg-blue-700 text-white font-black text-xs px-5 py-3 rounded-2xl shadow-md shadow-blue-500/20 transition-all cursor-pointer shrink-0"
-                  >
-                    <Zap size={16} className="fill-amber-300 text-amber-300" />
-                    <span>New Sale [F1]</span>
-                  </button>
+                  {hasPermission(user, TAB_PERMISSIONS.checkout) && (
+                    <button
+                      onClick={() => setCurrentTab('checkout')}
+                      className="flex items-center gap-2 bg-[#1a4cd2] hover:bg-blue-700 text-white font-black text-xs px-5 py-3 rounded-2xl shadow-md shadow-blue-500/20 transition-all cursor-pointer shrink-0"
+                    >
+                      <Zap size={16} className="fill-amber-300 text-amber-300" />
+                      <span>New Sale [F1]</span>
+                    </button>
+                  )}
 
-                  <button
-                    onClick={() => setCurrentTab('products')}
-                    className="flex items-center gap-2 bg-slate-50 hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold text-xs px-4 py-3 rounded-2xl transition-all cursor-pointer border border-slate-200 dark:border-slate-600 shrink-0"
-                  >
-                    <Package size={15} className="text-[#1a4cd2]" />
-                    <span>Products</span>
-                  </button>
+                  {hasPermission(user, TAB_PERMISSIONS.products) && (
+                    <button
+                      onClick={() => setCurrentTab('products')}
+                      className="flex items-center gap-2 bg-slate-50 hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold text-xs px-4 py-3 rounded-2xl transition-all cursor-pointer border border-slate-200 dark:border-slate-600 shrink-0"
+                    >
+                      <Package size={15} className="text-[#1a4cd2]" />
+                      <span>Products</span>
+                    </button>
+                  )}
 
-                  <button
-                    onClick={() => setCurrentTab('purchases')}
-                    className="flex items-center gap-2 bg-slate-50 hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold text-xs px-4 py-3 rounded-2xl transition-all cursor-pointer border border-slate-200 dark:border-slate-600 shrink-0"
-                  >
-                    <Truck size={15} className="text-emerald-600" />
-                    <span>Supplier Intake</span>
-                  </button>
+                  {hasPermission(user, TAB_PERMISSIONS.purchases) && (
+                    <button
+                      onClick={() => setCurrentTab('purchases')}
+                      className="flex items-center gap-2 bg-slate-50 hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold text-xs px-4 py-3 rounded-2xl transition-all cursor-pointer border border-slate-200 dark:border-slate-600 shrink-0"
+                    >
+                      <Truck size={15} className="text-emerald-600" />
+                      <span>Supplier Intake</span>
+                    </button>
+                  )}
 
-                  <button
-                    onClick={() => setCurrentTab('expenses')}
-                    className="flex items-center gap-2 bg-slate-50 hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold text-xs px-4 py-3 rounded-2xl transition-all cursor-pointer border border-slate-200 dark:border-slate-600 shrink-0"
-                  >
-                    <Wallet size={15} className="text-rose-600" />
-                    <span>Expenses</span>
-                  </button>
+                  {hasPermission(user, TAB_PERMISSIONS.expenses) && (
+                    <button
+                      onClick={() => setCurrentTab('expenses')}
+                      className="flex items-center gap-2 bg-slate-50 hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold text-xs px-4 py-3 rounded-2xl transition-all cursor-pointer border border-slate-200 dark:border-slate-600 shrink-0"
+                    >
+                      <Wallet size={15} className="text-rose-600" />
+                      <span>Expenses</span>
+                    </button>
+                  )}
 
-                  <button
-                    onClick={() => setCurrentTab('customers')}
-                    className="flex items-center gap-2 bg-slate-50 hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold text-xs px-4 py-3 rounded-2xl transition-all cursor-pointer border border-slate-200 dark:border-slate-600 shrink-0"
-                  >
-                    <Users size={15} className="text-blue-600" />
-                    <span>Customers</span>
-                  </button>
+                  {hasPermission(user, TAB_PERMISSIONS.customers) && (
+                    <button
+                      onClick={() => setCurrentTab('customers')}
+                      className="flex items-center gap-2 bg-slate-50 hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold text-xs px-4 py-3 rounded-2xl transition-all cursor-pointer border border-slate-200 dark:border-slate-600 shrink-0"
+                    >
+                      <Users size={15} className="text-blue-600" />
+                      <span>Customers</span>
+                    </button>
+                  )}
 
-                  <button
-                    onClick={() => setCurrentTab('shifts')}
-                    className="flex items-center gap-2 bg-slate-50 hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold text-xs px-4 py-3 rounded-2xl transition-all cursor-pointer border border-slate-200 dark:border-slate-600 shrink-0"
-                  >
-                    <Clock size={15} className="text-amber-600" />
-                    <span>Drawer Shifts</span>
-                  </button>
+                  {hasPermission(user, TAB_PERMISSIONS.shifts) && (
+                    <button
+                      onClick={() => setCurrentTab('shifts')}
+                      className="flex items-center gap-2 bg-slate-50 hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold text-xs px-4 py-3 rounded-2xl transition-all cursor-pointer border border-slate-200 dark:border-slate-600 shrink-0"
+                    >
+                      <Clock size={15} className="text-amber-600" />
+                      <span>Drawer Shifts</span>
+                    </button>
+                  )}
                 </div>
 
-                <button
-                  onClick={() => setCurrentTab('reports')}
-                  className="flex items-center gap-1.5 text-xs font-bold text-[#1a4cd2] dark:text-blue-400 hover:underline px-3 py-2 cursor-pointer shrink-0"
-                >
-                  <BarChart3 size={15} />
-                  <span>Full Analytics</span>
-                  <ArrowRight size={14} />
-                </button>
+                {hasPermission(user, TAB_PERMISSIONS.reports) && (
+                  <button
+                    onClick={() => setCurrentTab('reports')}
+                    className="flex items-center gap-1.5 text-xs font-bold text-[#1a4cd2] dark:text-blue-400 hover:underline px-3 py-2 cursor-pointer shrink-0"
+                  >
+                    <BarChart3 size={15} />
+                    <span>Full Analytics</span>
+                    <ArrowRight size={14} />
+                  </button>
+                )}
               </div>
 
               {/* 4 Primary Metric KPI Cards */}
@@ -479,6 +581,7 @@ export const App: React.FC = () => {
         onLockScreen={() => setIsLocked(true)}
         isDark={isDark}
         onToggleDark={() => setIsDark(!isDark)}
+        user={user}
       />
     </div>
   );

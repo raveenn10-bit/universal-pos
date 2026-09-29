@@ -21,6 +21,9 @@ import {
   FileText
 } from 'lucide-react';
 
+import { UserSession } from '../../../shared/types';
+import { hasPermission, TAB_PERMISSIONS } from '../../../shared/permissions';
+
 interface CommandPaletteProps {
   isOpen: boolean;
   onClose: () => void;
@@ -29,6 +32,7 @@ interface CommandPaletteProps {
   onLockScreen: () => void;
   isDark: boolean;
   onToggleDark: () => void;
+  user?: UserSession | null;
 }
 
 export const CommandPalette: React.FC<CommandPaletteProps> = ({
@@ -39,6 +43,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   onLockScreen,
   isDark,
   onToggleDark,
+  user,
 }) => {
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -50,36 +55,44 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       setQuery('');
       setSelectedIndex(0);
       setTimeout(() => inputRef.current?.focus(), 60);
-      // Fetch products for quick search
+      // Fetch products for quick search if user has catalog permission
+      const canAccessCatalog = hasPermission(user || null, ['catalog.manage', 'inventory.manage', 'pos.billing', '*']);
       const api = (window as any).apexApi;
-      if (api?.catalog?.searchProducts) {
+      if (canAccessCatalog && api?.catalog?.searchProducts) {
         api.catalog.searchProducts().then((res: any[]) => setProducts(res || []));
+      } else {
+        setProducts([]);
       }
     }
-  }, [isOpen]);
+  }, [isOpen, user]);
 
   if (!isOpen) return null;
 
-  const defaultCommands = [
-    { id: 'checkout', title: 'Open Fast Checkout (F1)', icon: Zap, category: 'Sales & POS', action: () => { onSelectTab('checkout'); onClose(); } },
-    { id: 'passport', title: 'Hardware Trace & IMEI / Serial Passport (F4)', icon: Barcode, category: 'Hardware Intelligence', action: () => { onClose(); onOpenPassport(); } },
+  const defaultCommands: { id: string; title: string; icon: any; category: string; perm?: string | string[]; action: () => void }[] = [
+    { id: 'checkout', title: 'Open Fast Checkout (F1)', icon: Zap, category: 'Sales & POS', perm: TAB_PERMISSIONS.checkout, action: () => { onSelectTab('checkout'); onClose(); } },
+    { id: 'passport', title: 'Hardware Trace & IMEI / Serial Passport (F4)', icon: Barcode, category: 'Hardware Intelligence', perm: ['pos.billing', 'catalog.manage', 'repairs.manage', '*'], action: () => { onClose(); onOpenPassport(); } },
     { id: 'lock', title: 'Lock Register / Lock Screen (Ctrl+L)', icon: Lock, category: 'Security', action: () => { onClose(); onLockScreen(); } },
-    { id: 'dashboard', title: 'Dashboard & Core Business KPIs', icon: ShoppingCart, category: 'Navigation', action: () => { onSelectTab('dashboard'); onClose(); } },
-    { id: 'products', title: 'Products & Inventory Catalog', icon: Package, category: 'Navigation', action: () => { onSelectTab('products'); onClose(); } },
-    { id: 'customers', title: 'Customer Ledger & Balances', icon: Users, category: 'Navigation', action: () => { onSelectTab('customers'); onClose(); } },
-    { id: 'orders', title: 'Orders & Tax Invoices History', icon: FileText, category: 'Navigation', action: () => { onSelectTab('orders'); onClose(); } },
-    { id: 'purchases', title: 'Supplier Purchases & Inward Intake', icon: Truck, category: 'Navigation', action: () => { onSelectTab('purchases'); onClose(); } },
-    { id: 'expenses', title: 'Operating Expenses & Petty Cash', icon: Wallet, category: 'Navigation', action: () => { onSelectTab('expenses'); onClose(); } },
-    { id: 'repairs', title: 'Repairs & Technical Workflows', icon: Wrench, category: 'Navigation', action: () => { onSelectTab('repairs'); onClose(); } },
-    { id: 'tradein', title: 'Trade-In / Device Exchange System', icon: RefreshCw, category: 'Navigation', action: () => { onSelectTab('tradein'); onClose(); } },
-    { id: 'staff', title: 'Staff Accounts & Granular Roles', icon: ShieldCheck, category: 'Navigation', action: () => { onSelectTab('staff'); onClose(); } },
-    { id: 'reports', title: 'Reports & P&L Statement', icon: BarChart3, category: 'Navigation', action: () => { onSelectTab('reports'); onClose(); } },
-    { id: 'templates', title: 'Document & Receipt Template Editor', icon: Layers, category: 'Navigation', action: () => { onSelectTab('templates'); onClose(); } },
-    { id: 'settings', title: 'System & Business Profile Settings', icon: Settings, category: 'Navigation', action: () => { onSelectTab('settings'); onClose(); } },
+    { id: 'dashboard', title: 'Dashboard & Core Business KPIs', icon: ShoppingCart, category: 'Navigation', perm: TAB_PERMISSIONS.dashboard, action: () => { onSelectTab('dashboard'); onClose(); } },
+    { id: 'products', title: 'Products & Inventory Catalog', icon: Package, category: 'Navigation', perm: TAB_PERMISSIONS.products, action: () => { onSelectTab('products'); onClose(); } },
+    { id: 'customers', title: 'Customer Ledger & Balances', icon: Users, category: 'Navigation', perm: TAB_PERMISSIONS.customers, action: () => { onSelectTab('customers'); onClose(); } },
+    { id: 'orders', title: 'Orders & Tax Invoices History', icon: FileText, category: 'Navigation', perm: TAB_PERMISSIONS.orders, action: () => { onSelectTab('orders'); onClose(); } },
+    { id: 'purchases', title: 'Supplier Purchases & Inward Intake', icon: Truck, category: 'Navigation', perm: TAB_PERMISSIONS.purchases, action: () => { onSelectTab('purchases'); onClose(); } },
+    { id: 'expenses', title: 'Operating Expenses & Petty Cash', icon: Wallet, category: 'Navigation', perm: TAB_PERMISSIONS.expenses, action: () => { onSelectTab('expenses'); onClose(); } },
+    { id: 'repairs', title: 'Repairs & Technical Workflows', icon: Wrench, category: 'Navigation', perm: TAB_PERMISSIONS.repairs, action: () => { onSelectTab('repairs'); onClose(); } },
+    { id: 'tradein', title: 'Trade-In / Device Exchange System', icon: RefreshCw, category: 'Navigation', perm: TAB_PERMISSIONS.tradein, action: () => { onSelectTab('tradein'); onClose(); } },
+    { id: 'staff', title: 'Staff Accounts & Granular Roles', icon: ShieldCheck, category: 'Navigation', perm: TAB_PERMISSIONS.staff, action: () => { onSelectTab('staff'); onClose(); } },
+    { id: 'reports', title: 'Reports & P&L Statement', icon: BarChart3, category: 'Navigation', perm: TAB_PERMISSIONS.reports, action: () => { onSelectTab('reports'); onClose(); } },
+    { id: 'templates', title: 'Document & Receipt Template Editor', icon: Layers, category: 'Navigation', perm: TAB_PERMISSIONS.templates, action: () => { onSelectTab('templates'); onClose(); } },
+    { id: 'settings', title: 'System & Business Profile Settings', icon: Settings, category: 'Navigation', perm: TAB_PERMISSIONS.settings, action: () => { onSelectTab('settings'); onClose(); } },
     { id: 'theme', title: `Toggle Theme (${isDark ? 'Switch to Light' : 'Switch to Dark'})`, icon: isDark ? Sun : Moon, category: 'Appearance', action: () => { onToggleDark(); onClose(); } },
   ];
 
-  const matchedCommands = defaultCommands.filter(c =>
+  const permittedCommands = defaultCommands.filter(c => {
+    if (!c.perm) return true;
+    return hasPermission(user || null, c.perm);
+  });
+
+  const matchedCommands = permittedCommands.filter(c =>
     c.title.toLowerCase().includes(query.toLowerCase()) ||
     c.category.toLowerCase().includes(query.toLowerCase())
   );

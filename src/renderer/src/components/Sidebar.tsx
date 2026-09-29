@@ -25,7 +25,10 @@ import {
   Shirt,
   ShoppingBag
 } from 'lucide-react';
-import { BusinessProfileConfig, BusinessProfileType } from '../../../shared/types';
+import { BusinessProfileConfig, BusinessProfileType, UserSession } from '../../../shared/types';
+import { hasPermission, TAB_PERMISSIONS } from '../../../shared/permissions';
+
+export { hasPermission, TAB_PERMISSIONS };
 
 export type NavTab = 
   | 'dashboard' 
@@ -53,6 +56,7 @@ interface SidebarProps {
   appLogo?: string;
   profileConfig?: BusinessProfileConfig | null;
   onLockScreen?: () => void;
+  user: UserSession | null;
 }
 
 const PROFILE_THEMES: Record<string, {
@@ -147,6 +151,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   appLogo,
   profileConfig,
   onLockScreen,
+  user,
 }) => {
   const activeProfileType = profileConfig?.profileType || 'GENERAL_RETAIL';
   const theme = PROFILE_THEMES[activeProfileType] || PROFILE_THEMES.GENERAL_RETAIL;
@@ -185,6 +190,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'templates', label: 'Document Editor', icon: <Layers size={18} /> }
   );
 
+  // Filter navigation items strictly by user permissions
+  const permittedItems = baseItems.filter((item) => {
+    const required = TAB_PERMISSIONS[item.id];
+    return required ? hasPermission(user, required) : true;
+  });
+
   return (
     <aside className={`w-64 ${theme.bgGradient} text-white flex flex-col justify-between shrink-0 h-screen select-none shadow-2xl z-20`}>
       {/* Top Header */}
@@ -213,7 +224,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Navigation Links Scrollable */}
         <nav className="p-3 space-y-1 overflow-y-auto flex-1 custom-scrollbar">
-          {baseItems.map((item) => {
+          {permittedItems.map((item) => {
             const isActive = currentTab === item.id;
             return (
               <button
@@ -276,18 +287,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
         </div>
 
-        {/* Settings Tab */}
-        <button
-          onClick={() => onSelectTab('settings')}
-          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-            currentTab === 'settings'
-              ? 'bg-white/25 text-white'
-              : 'text-white/80 hover:bg-white/10 hover:text-white'
-          }`}
-        >
-          <Settings size={16} />
-          <span>System Settings</span>
-        </button>
+        {/* Settings Tab - Only rendered if user has settings permission */}
+        {hasPermission(user, TAB_PERMISSIONS.settings) && (
+          <button
+            onClick={() => onSelectTab('settings')}
+            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              currentTab === 'settings'
+                ? 'bg-white/25 text-white'
+                : 'text-white/80 hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            <Settings size={16} />
+            <span>System Settings</span>
+          </button>
+        )}
       </div>
     </aside>
   );

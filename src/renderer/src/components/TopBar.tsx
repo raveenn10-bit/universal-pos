@@ -11,6 +11,7 @@ import {
   ShieldAlert
 } from 'lucide-react';
 import { UserSession, BusinessProfileConfig } from '../../../shared/types';
+import { hasPermission } from '../../../shared/permissions';
 
 interface TopBarProps {
   user: UserSession | null;
@@ -91,14 +92,16 @@ export const TopBar: React.FC<TopBarProps> = ({
           <span>F4 Passport</span>
         </button>
 
-        {/* Quick Checkout POS Action */}
-        <button
-          onClick={onQuickCheckout}
-          className="flex items-center gap-2 bg-[#1a4cd2] hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-md shadow-blue-500/20 transition-all cursor-pointer"
-        >
-          <Zap size={15} className="fill-amber-300 text-amber-300" />
-          <span>New Sale (F1)</span>
-        </button>
+        {/* Quick Checkout POS Action - only if user has pos.billing, pos.checkout, or * */}
+        {hasPermission(user, ['pos.billing', 'pos.checkout', '*']) && (
+          <button
+            onClick={onQuickCheckout}
+            className="flex items-center gap-2 bg-[#1a4cd2] hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-md shadow-blue-500/20 transition-all cursor-pointer"
+          >
+            <Zap size={15} className="fill-amber-300 text-amber-300" />
+            <span>New Sale (F1)</span>
+          </button>
+        )}
 
         {/* Lock Screen Button */}
         <button

@@ -130,6 +130,54 @@ export function setupInitialOwner(payload: {
   return session;
 }
 
+export function getEffectivePermissions(user: { id: string; role: string }): string[] {
+  if (user.role === 'owner' || user.role === 'developer' || user.role === 'role_owner') {
+    return ['*'];
+  }
+
+  const db = getDb();
+  let perms: string[] = [];
+
+  // 1. Look up role permissions from roles table
+  try {
+    const roleRow = db.prepare(`
+      SELECT permissions_json FROM roles 
+      WHERE id = ? OR id = ? OR LOWER(name) = LOWER(?)
+    `).get(user.role, `role_${user.role}`, user.role) as { permissions_json: string } | undefined;
+
+    if (roleRow?.permissions_json) {
+      perms = JSON.parse(roleRow.permissions_json);
+    }
+  } catch (err) {
+    console.error('Error fetching role permissions:', err);
+  }
+
+  // 2. If not found in DB or empty, provide standard fallback based on system roles
+  if (!perms || perms.length === 0) {
+    if (user.role === 'cashier') {
+      perms = ['pos.billing', 'customers.manage', 'shifts.drawer'];
+    } else if (user.role === 'manager') {
+      perms = ['pos.billing', 'pos.discount', 'pos.refund', 'catalog.manage', 'inventory.manage', 'customers.manage', 'reports.view', 'shifts.manage', 'staff.manage', 'procurement.manage', 'expenses.manage', 'repairs.manage', 'tradein.manage'];
+    } else if (user.role === 'technician') {
+      perms = ['repairs.manage', 'tradein.manage', 'inventory.view'];
+    } else if (user.role === 'inventory') {
+      perms = ['inventory.manage', 'catalog.manage', 'procurement.manage'];
+    }
+  }
+
+  // 3. Add explicit user-level permission overrides from user_permissions
+  try {
+    const permRows = db.prepare('SELECT permission_key FROM user_permissions WHERE user_id = ? AND is_granted = 1').all(user.id) as { permission_key: string }[];
+    for (const r of permRows) {
+      if (!perms.includes(r.permission_key)) {
+        perms.push(r.permission_key);
+      }
+    }
+  } catch {}
+
+  return perms;
+}
+
 export function loginUser(username: string, password: string): UserSession {
   const db = getDb();
   const cleanUsername = username.trim().toLowerCase();
@@ -160,9 +208,8 @@ export function loginUser(username: string, password: string): UserSession {
   // Reset failed attempts on success
   loginAttempts.delete(cleanUsername);
 
-  // Fetch individual permissions
-  const permRows = db.prepare('SELECT permission_key FROM user_permissions WHERE user_id = ? AND is_granted = 1').all(user.id) as { permission_key: string }[];
-  const permissions = user.role === 'owner' ? ['*'] : permRows.map(r => r.permission_key);
+  // Fetch effective permissions combining role definitions and custom user permissions
+  const permissions = getEffectivePermissions(user);
 
   const token = generateSessionToken();
   const session: UserSession = {
@@ -237,8 +284,7 @@ export function loginWithPin(pin: string): UserSession {
 
   for (const u of users) {
     if (u.pin_hash && verifyPassword(pin, u.pin_hash)) {
-      const permRows = db.prepare('SELECT permission_key FROM user_permissions WHERE user_id = ? AND is_granted = 1').all(u.id) as { permission_key: string }[];
-      const permissions = u.role === 'owner' ? ['*'] : permRows.map(r => r.permission_key);
+      const permissions = getEffectivePermissions(u);
 
       const token = generateSessionToken();
       const session: UserSession = {
