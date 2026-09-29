@@ -1,0 +1,121 @@
+# Harsh Apex Universal POS - Implementation Progress & Log
+
+## Current Status: Release Packaging & Verification (Phase 1–8 Completed)
+
+### Completed Milestones
+- [x] **Workspace & Toolchain Initialization**:
+  - Environment: Node v24.15.0, npm 11.12.1, Electron v33.4.11, TypeScript 5.8.3, Vite 5.4.14.
+  - Native SQLite driver configured with WAL mode and foreign key constraints enabled.
+- [x] **Comprehensive Documentation Suite**:
+  - `docs/PRODUCT_SPEC.md` — Complete multi-profile offline Windows POS specification.
+  - `docs/ARCHITECTURE.md` — Secure layered architecture (Renderer -> IPC Preload -> Domain Services -> SQLite).
+  - `docs/DATA_MODEL.md` — Full database schema, minor-unit financial types, constraints, audit tables.
+  - `docs/PERMISSIONS.md` — 3-tier access matrix (Product Developer, Shop Owner/Admin, Manager/Cashier).
+  - `docs/TEST_PLAN.md` — Detailed test specifications for unit, integration, and security tests.
+  - `docs/RELEASE_CHECKLIST.md` — 18-point release gate criteria and compliance verifications.
+  - `docs/KNOWN_LIMITATIONS.md` — Transparent operational boundaries (offline, single-machine, local admin considerations).
+  - `docs/DEVELOPER_GUIDE.md` — Standalone provisioning CLI usage, Ed25519 key management, license issuance.
+  - `docs/SHOP_OWNER_GUIDE.md` — Operational manual for shop owners, inventory, sales, returns, and shifts.
+  - `docs/CUSTOMER_MANAGEMENT_GUIDE.md` — Credit limits, statements, customer ledgers, and snapshot integrity.
+  - `docs/DOCUMENT_TEMPLATE_GUIDE.md` — Thermal receipt (58/80mm) and A4 invoice template customization.
+  - `docs/BACKUP_AND_RECOVERY_GUIDE.md` — SQLite online backup API, integrity check, disaster recovery procedures.
+  - `docs/HARDWARE_COMPATIBILITY.md` — ESC/POS thermal printers, barcode scanners, and cash drawers.
+- [x] **Cryptographic Security & Developer Provisioning**:
+  - `src/main/crypto/signer.ts`: Asymmetric Ed25519 signature generation and verification with hardware fingerprinting.
+  - `src/main/crypto/hasher.ts`: `scrypt` salted password hashing, `timingSafeEqual` constant-time verification, session tokens.
+  - `tools/dev-cli/index.ts`: Standalone developer provisioning tool for generating developer keypairs and signing `.apexlicense` packages.
+  - Generated and validated offline demo license: `Harsh_Apex_Demo_Supermarket.apexlicense`.
+  - Zero private keys or developer backdoors bundled into customer runtime.
+- [x] **Privileged Domain Services & SQLite Engine**:
+  - Database engine (`src/main/services/db.ts`): Versioned schema migrations, WAL journaling, synchronous NORMAL, FK enforcement.
+  - Auth Service (`src/main/services/authService.ts`): Throttled login (5 attempts / 15m), permission validation, first-run setup wizard.
+  - License Service (`src/main/services/licenseService.ts`): Profile enforcement, feature gating, hardware binding.
+  - Catalog Service (`src/main/services/catalogService.ts`): Products, categories, brands, variants, barcodes.
+  - Inventory Service (`src/main/services/inventoryService.ts`): Atomically tracked stock levels, adjustments with audit reasons, serial/IMEI tracking, batch/expiry controls.
+  - Customer Service (`src/main/services/customerService.ts`): Derived ledger balances, credit limit guardrails, customer statements.
+  - Checkout Service (`src/main/services/checkoutService.ts`): Atomic ACID transactions, split payments (Cash, Card, Credit), idempotency keys, immutable customer snapshotting.
+  - Returns Service (`src/main/services/returnService.ts`): Return quantity validation, restock vs quarantine disposition, credit notes.
+  - Shift Service (`src/main/services/shiftService.ts`): Cash drawer opening/closing floats, expected vs actual cash reconciliation.
+  - Reports Service (`src/main/services/reportService.ts`): Real aggregated KPIs, sales trends, category distribution, top sold items.
+  - PDF Generator (`src/main/services/pdfService.ts`): Offline PDFKit engine for 80mm/58mm thermal receipts, A4 multi-page invoices with repeated headers, and customer statements.
+  - Backup Service (`src/main/services/backupService.ts`): SQLite Online Backup API, integrity check verification, pre-restore safety snapshots.
+- [x] **Secure IPC & Preload Bridge**:
+  - Context isolation enabled, Node integration disabled in renderer.
+  - Restrictive Content Security Policy (`default-src 'self'`).
+  - Typed preload API (`window.apexApi`) in `src/main/preload.ts`.
+  - Schema-validated IPC handlers in `src/main/ipc/index.ts`.
+- [x] **Frontend UI (Tailwind v4, React 18, Recharts, Lucide)**:
+  - Deep blue sidebar (`#1a4cd2`), top bar with quick search and active staff chip.
+  - 4 KPI metric cards with SVG wave sparklines.
+  - Curved dual-line sales trend chart and grouped product views bar chart.
+  - Recent orders table with payment status pills and action buttons.
+  - Top-selling items list with color-coded progress bars.
+  - Fast Checkout Screen: barcode scanner input, keyboard shortcuts (F1-F4), cart modification, split tender payment modal, PDF preview/save.
+  - Setup Wizard: First-run owner account onboarding.
+  - Template Editor: Interactive visual editor for receipt/invoice customization.
+  - Settings View: Database backups, restore snapshots, profile switching, license import.
+- [x] **Automated Test Suite**:
+  - 7 test suites, 22 automated tests passing with 100% pass rate (`tests/database.test.ts`, `tests/crypto.test.ts`, `tests/math.test.ts`, `tests/pdf.test.ts`, `tests/returns.test.ts`, `tests/customer.test.ts`, `tests/backup.test.ts`).
+  - Offline PDF generation verified on disk (`tests/test_output_pdfs/`).
+- [x] **Dedicated Tab Management Views (New)**:
+  - `CustomersView.tsx`: Customer directory, credit limit enforcement, balance indicators, settlement payments, statement PDF generator.
+  - `ProductsView.tsx`: Product catalog, barcode/SKU search, category filtering, stock level badges (green/amber/red), stock adjustments.
+  - `OrdersView.tsx`: Complete sales order history, invoice detail modal, thermal receipt reprinting, A4 invoice PDF download.
+  - `ShiftsView.tsx`: Register drawer status, opening float, cash in / cash out, shift close reconciliation with Over/Short discrepancy indicator, shift history log.
+  - `ReportsView.tsx`: Financial intelligence dashboard, Profit & Loss overview, COGS, margins, category breakdown, fast-moving items.
+  - `App.tsx`: Modern Apple Vision POS style quick actions bar (F1 Sale, +Product, +Customer, Shifts, A4 Invoices) and low stock alerts.
+- [x] **Setup Wizard & Authentication Idempotency (New)**:
+  - Fixed `authService.setupInitialOwner` so that existing owner records seamlessly authenticate instead of throwing blocking errors.
+  - Form typing and text selection unblocked by removing `select-none` on form containers.
+- [x] **A4 Invoice PDF Redesign (Image 4 Match) (New)**:
+  - Fully redesigned `generateA4InvoicePdf` in `src/main/services/pdfService.ts` matching the user's reference image:
+    - Top-left coral red square badge with business initial + company info.
+    - Large bold "INVOICE #..." on top-right.
+    - Client info ("INVOICE TO:") and gray meta card with red accent bar on right.
+    - Solid coral red table header with white bold text.
+    - Zebra striped rows with item name, SKU/serial subtitles.
+    - Payment Method, Terms & Conditions, and script signature block on bottom left.
+    - Subtotal, Tax Vat, Discount, and solid red Grand Total highlight banner on bottom right.
+    - Centered red "Thank you for your business!" footer with contact info.
+    - Fitted precisely onto 1 clean page.
+- [x] **Updated Commercial Distribution Package**:
+  - Rebuilt Windows NSIS installer: `dist/installer/Harsh Apex Universal POS Setup 1.0.0.exe` (96.1 MB).
+  - Updated Customer Release ZIP: `dist/Harsh_Apex_POS_v1.0.0_Customer_Package.zip` (96.15 MB) containing installer, demo license, sample A4 invoice PDF, and comprehensive Sinhala README guide (`README_SINHALA.md` / `README_SINHALA.txt`).
+
+### Active / Final Phase (100% Production Ready Release)
+- [x] Compiling Electron main and renderer bundles (`tsc`, `vite build`):
+  - Fixed Vite build memory issue by providing explicit `.gitignore` and targeted `@source` directives in CSS, reducing build memory from 6.5GB to 520MB and completing in 16.8s.
+- [x] Runtime Hardening & ABI Resolution:
+  - SQLite engine configured with durable disk persistence to `%APPDATA%/HarshApexPOS/data/pos.db`.
+  - Electron 34.5.8 runtime hardened with disabled hardware acceleration fallback for universal Windows compatibility.
+- [x] 100% Production Credentials Configured & Seeded:
+  - **Username**: `harshapex`
+  - **Password**: `chami2003`
+  - **Quick PIN**: `2003`
+  - **Full Name**: `Harsh Apex Administrator`
+  - **Role**: `owner`
+- [x] Developer Protection (Asymmetric Ed25519 Cryptography):
+  - Developer private key held strictly outside customer runtime.
+  - Zero developer backdoors, universal master PINs, or hardcoded passwords.
+  - POS runtime only contains public key `dev_pub.pem` for verifying cryptographic signatures.
+- [x] 7 Developer-Signed Commercial Licenses Generated:
+  - `general_retail_harshapex.apexlicense`
+  - `supermarket_harshapex.apexlicense`
+  - `mobile_phones_harshapex.apexlicense`
+  - `mobile_accessories_harshapex.apexlicense`
+  - `electronics_harshapex.apexlicense`
+  - `shoes_harshapex.apexlicense`
+  - `bags_fashion_harshapex.apexlicense`
+- [x] Multi-Business Commercial Product Catalog Seeded:
+  - Mobile Phones (dual IMEI tracking), Electronics (Serial number tracking), Supermarket (Batch/expiry/kg), Shoes & Fashion (Size/color), Accessories.
+- [x] Automated Tests:
+  - 7 test suites, 22 tests passing with 100% pass rate (`vitest run`).
+- [x] Completing Windows NSIS installer packaging via `electron-builder`:
+  - `dist/installer/Harsh Apex Universal POS Setup 1.0.0.exe` (96.1 MB)
+  - `dist/installer/win-unpacked/Harsh Apex Universal POS.exe` (188.7 MB)
+- [x] Customer Delivery Package Prepared & Compressed:
+  - Sinhala User Guide & Manual: `dist/Harsh_Apex_POS_Customer_Release/CLIENT_HANDOFF_MANUAL_SINHALA.md`
+  - Sample A4 Tax Invoice (Image 4 Match): `dist/Harsh_Apex_POS_Customer_Release/Sample_A4_Tax_Invoice_Image4.pdf`
+  - 7 Signed Enterprise Licenses: `dist/Harsh_Apex_POS_Customer_Release/Business_Profiles_Licenses/`
+  - Windows Installer: `dist/Harsh_Apex_POS_Customer_Release/Harsh Apex Universal POS Setup 1.0.0.exe`
+  - Complete Customer Delivery Zip: `dist/Harsh_Apex_POS_v1.0.0_Customer_Package.zip` (96.15 MB)

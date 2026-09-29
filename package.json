@@ -1,0 +1,47 @@
+{
+  "name": "harsh-apex-universal-pos",
+  "version": "1.0.0",
+  "description": "Harsh Apex Universal POS - Offline Commercial Windows Desktop POS",
+  "main": "dist-electron/src/main/index.js",
+  "scripts": {
+    "build:vite": "vite build",
+    "build:electron": "tsc -p tsconfig.node.json",
+    "build": "npm run build:vite && npm run build:electron",
+    "test": "vitest run",
+    "keygen": "tsc -p tsconfig.node.json && node dist-electron/tools/dev-cli/index.js keygen",
+    "provision": "tsc -p tsconfig.node.json && node dist-electron/tools/dev-cli/index.js provision"
+  },
+  "author": "Harsh Apex",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.48.0",
+    "pdfkit": "^0.20.2",
+    "qrcode": "^1.5.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^2.15.1",
+    "sql.js": "^1.14.2",
+    "tailwind-merge": "^3.7.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^22.13.9",
+    "@types/pdfkit": "^0.17.6",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@types/sql.js": "^1.4.9",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "electron": "^34.5.8",
+    "electron-builder": "^26.15.3",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^4.0.9",
+    "typescript": "^5.8.2",
+    "vite": "^6.2.0",
+    "vitest": "^3.0.7"
+  }
+}

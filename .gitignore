@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+dist-electron/
+release/
+*.exe
+*.blockmap
+*.zip
+
+# Database and test artifacts
+*.db
+*.db-journal
+*.db-wal
+tests/backups/
+tests/test_output_pdfs/
+*.pdf
+
+# Logs and system files
+*.log
+.DS_Store
+Thumbs.db
+
+# Developer security keys (Protect private signing keys)
+developer_keys/
+*.pem
+!src/main/crypto/dev_pub.pem

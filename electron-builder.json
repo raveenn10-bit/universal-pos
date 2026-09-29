@@ -1,0 +1,45 @@
+{
+  "appId": "com.harshapex.pos",
+  "productName": "Harsh Apex Universal POS",
+  "npmRebuild": false,
+  "directories": {
+    "output": "dist/installer",
+    "app": "."
+  },
+  "files": [
+    "dist/renderer/**/*",
+    "dist-electron/src/**/*",
+    "node_modules/**/*",
+    "!node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+    "!node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
+    "!tools/dev-cli/**/*",
+    "!dist-electron/tools/**/*",
+    "!developer_keys/**/*",
+    "!dist-electron/developer_keys/**/*",
+    "!tests/**/*",
+    "!docs/**/*",
+    "!*.apexlicense",
+    "!*.ts",
+    "package.json"
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      },
+      {
+        "target": "dir",
+        "arch": ["x64"]
+      }
+    ]
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "Harsh Apex Universal POS"
+  }
+}
