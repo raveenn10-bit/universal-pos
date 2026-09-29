@@ -309,9 +309,9 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ token }) => {
                           )}
                         </td>
                         <td className="py-3.5 px-4 text-center text-slate-500 text-[11px]">
-                          {p.tracksImei ? (
+                          {(p as any).tracksImei ? (
                             <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-700 font-bold">IMEI</span>
-                          ) : p.tracksSerial ? (
+                          ) : (p as any).tracksSerial ? (
                             <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-bold">Serial</span>
                           ) : (
                             <span className="text-slate-400">Standard</span>

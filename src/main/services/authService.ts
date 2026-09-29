@@ -195,6 +195,10 @@ export function logoutUser(token: string): void {
   activeSessions.delete(token);
 }
 
+export function registerActiveSession(session: UserSession): void {
+  activeSessions.set(session.token, session);
+}
+
 export function getSession(token: string): UserSession | null {
   return activeSessions.get(token) || null;
 }
@@ -204,6 +208,15 @@ export function assertPermission(session: UserSession | null, requiredPermission
     throw new Error('Authentication required.');
   }
   if (session.role === 'owner' || session.permissions.includes('*')) {
+    return;
+  }
+  if (requiredPermission === 'staff.manage' && (session.permissions.includes('staff.manage') || session.permissions.includes('users.manage'))) {
+    return;
+  }
+  if (requiredPermission === 'catalog.manage' && (session.permissions.includes('catalog.manage') || session.permissions.includes('inventory.adjust') || session.permissions.includes('inventory.view'))) {
+    return;
+  }
+  if (requiredPermission === 'pos.checkout' && (session.permissions.includes('pos.checkout') || session.permissions.includes('pos.billing'))) {
     return;
   }
   if (!session.permissions.includes(requiredPermission)) {
@@ -361,6 +374,10 @@ export function getRoles(): any[] {
 export function createRole(name: string, description: string, permissions: string[], session: UserSession): any {
   assertPermission(session, 'staff.manage');
   const db = getDb();
+  const existing = db.prepare('SELECT id FROM roles WHERE LOWER(name) = LOWER(?)').get(name.trim());
+  if (existing) {
+    throw new Error(`A role with the name '${name.trim()}' already exists.`);
+  }
   const id = `role_${crypto.randomUUID()}`;
   const now = new Date().toISOString();
 

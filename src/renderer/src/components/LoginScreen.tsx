@@ -19,6 +19,7 @@ interface LoginScreenProps {
   isDark: boolean;
   onToggleDark: () => void;
   profileConfig?: BusinessProfileConfig | null;
+  branding?: any;
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({
@@ -26,6 +27,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   isDark,
   onToggleDark,
   profileConfig,
+  branding,
 }) => {
   const [loginMode, setLoginMode] = useState<'password' | 'pin'>('password');
   const [username, setUsername] = useState('harshapex');
@@ -136,20 +138,26 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           {/* Logo & Store Title */}
           <div className="text-center mb-6">
             <div className="inline-block relative mb-3">
-              <div className="w-16 h-16 rounded-2xl bg-[#1a4cd2] text-white flex items-center justify-center mx-auto shadow-xl shadow-blue-500/25">
-                <Store className="w-8 h-8" />
-              </div>
+              {branding?.appLogo ? (
+                <div className="w-16 h-16 rounded-2xl border border-slate-200 dark:border-slate-700 p-1 bg-white shadow-xl flex items-center justify-center mx-auto overflow-hidden">
+                  <img src={branding.appLogo} alt="Logo" className="w-full h-full object-contain rounded-xl" />
+                </div>
+              ) : (
+                <div className="w-16 h-16 rounded-2xl bg-[#1a4cd2] text-white flex items-center justify-center mx-auto shadow-xl shadow-blue-500/25">
+                  <Store className="w-8 h-8" />
+                </div>
+              )}
               <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-2 border-white dark:border-slate-800 rounded-full" />
             </div>
 
             <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-              Harsh Apex <span className="text-[#1a4cd2] dark:text-blue-400">Universal POS</span>
+              {branding?.appName || 'Harsh Apex Universal POS'}
             </h1>
             <p className="text-[11px] font-bold text-[#1a4cd2] dark:text-blue-400 uppercase tracking-widest mt-0.5">
-              {profileConfig?.displayName || 'Commercial Windows Desktop POS'}
+              {branding?.businessName || profileConfig?.displayName || 'Commercial Windows Desktop POS'}
             </p>
             <p className="text-[11px] text-slate-400 mt-1">
-              Offline Multi-Industry Business Management System
+              Offline Multi-Industry POS Terminal
             </p>
           </div>
 

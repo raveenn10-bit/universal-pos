@@ -49,6 +49,8 @@ interface SidebarProps {
   isDark: boolean;
   onToggleDark: () => void;
   businessName: string;
+  appName?: string;
+  appLogo?: string;
   profileConfig?: BusinessProfileConfig | null;
   onLockScreen?: () => void;
 }
@@ -141,6 +143,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isDark,
   onToggleDark,
   businessName,
+  appName,
+  appLogo,
   profileConfig,
   onLockScreen,
 }) => {
@@ -187,15 +191,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="flex flex-col min-h-0 flex-1">
         <div className="h-20 flex items-center justify-between px-5 border-b border-white/15">
           <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-2xl ${theme.iconBg} ${theme.iconColor} flex items-center justify-center font-black shadow-lg`}>
-              <ProfileIcon size={22} />
-            </div>
+            {appLogo ? (
+              <div className="w-10 h-10 rounded-2xl bg-white p-1 flex items-center justify-center shadow-lg overflow-hidden shrink-0">
+                <img src={appLogo} alt="Logo" className="w-full h-full object-contain rounded-xl" />
+              </div>
+            ) : (
+              <div className={`w-10 h-10 rounded-2xl ${theme.iconBg} ${theme.iconColor} flex items-center justify-center font-black shadow-lg shrink-0`}>
+                <ProfileIcon size={22} />
+              </div>
+            )}
             <div>
               <span className="font-black text-base tracking-tight block leading-tight truncate max-w-[145px]">
-                {businessName || theme.appTitle}
+                {appName || businessName || theme.appTitle}
               </span>
               <span className="text-[10px] text-white/70 tracking-wide font-bold block uppercase truncate max-w-[145px]">
-                {profileConfig?.displayName || theme.tagline}
+                {businessName || profileConfig?.displayName || theme.tagline}
               </span>
             </div>
           </div>

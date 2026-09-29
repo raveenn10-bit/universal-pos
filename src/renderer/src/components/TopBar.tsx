@@ -23,6 +23,7 @@ interface TopBarProps {
   onSearchChange: (q: string) => void;
   isDark: boolean;
   profileConfig?: BusinessProfileConfig | null;
+  branding?: any;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -36,6 +37,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onSearchChange,
   isDark,
   profileConfig,
+  branding,
 }) => {
   return (
     <header className="h-20 flex items-center justify-between px-8 bg-transparent shrink-0 select-none">
@@ -44,12 +46,13 @@ export const TopBar: React.FC<TopBarProps> = ({
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-black tracking-tight text-slate-900 dark:text-white">
-              {profileConfig?.displayName || 'Universal POS'}
+              {branding?.businessName || profileConfig?.displayName || 'Universal POS'}
             </h1>
             <span className="text-xl" role="img" aria-label="wave">👋</span>
           </div>
           <p className="text-[11px] text-slate-400 font-medium">
             Terminal Operator: <strong className="text-slate-700 dark:text-slate-200">{user?.fullName || 'Administrator'}</strong>
+            {branding?.appName && <span className="ml-2 text-slate-400">({branding.appName})</span>}
           </p>
         </div>
       </div>

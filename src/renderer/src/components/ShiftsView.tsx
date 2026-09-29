@@ -358,18 +358,18 @@ export const ShiftsView: React.FC<ShiftsViewProps> = ({ token, user }) => {
                           LKR {(s.openingCashMinor / 100).toFixed(2)}
                         </td>
                         <td className="py-3 px-4 text-right font-semibold text-slate-700 dark:text-slate-200">
-                          {s.closingCashExpectedMinor !== null ? `LKR ${(s.closingCashExpectedMinor / 100).toFixed(2)}` : '-'}
+                          {s.closingCashExpectedMinor != null ? `LKR ${(s.closingCashExpectedMinor / 100).toFixed(2)}` : '-'}
                         </td>
                         <td className="py-3 px-4 text-right font-bold text-slate-800 dark:text-white">
-                          {s.closingCashCountedMinor !== null ? `LKR ${(s.closingCashCountedMinor / 100).toFixed(2)}` : '-'}
+                          {s.closingCashCountedMinor != null ? `LKR ${(s.closingCashCountedMinor / 100).toFixed(2)}` : '-'}
                         </td>
                         <td className="py-3 px-4 text-right font-bold">
-                          {s.discrepancyMinor === null || s.discrepancyMinor === 0 ? (
+                          {s.discrepancyMinor == null || s.discrepancyMinor === 0 ? (
                             <span className="text-emerald-600">Matched (0.00)</span>
-                          ) : s.discrepancyMinor > 0 ? (
-                            <span className="text-blue-600">+ LKR {(s.discrepancyMinor / 100).toFixed(2)} (Over)</span>
+                          ) : (s.discrepancyMinor || 0) > 0 ? (
+                            <span className="text-blue-600">+ LKR {((s.discrepancyMinor || 0) / 100).toFixed(2)} (Over)</span>
                           ) : (
-                            <span className="text-rose-600">- LKR {Math.abs(s.discrepancyMinor / 100).toFixed(2)} (Short)</span>
+                            <span className="text-rose-600">- LKR {Math.abs((s.discrepancyMinor || 0) / 100).toFixed(2)} (Short)</span>
                           )}
                         </td>
                         <td className="py-3 px-4 text-center">

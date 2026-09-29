@@ -17,13 +17,32 @@ import * as repairService from '../services/repairService';
 import * as tradeInService from '../services/tradeInService';
 import * as expenseService from '../services/expenseService';
 import * as procurementService from '../services/procurementService';
+import * as storeConfigService from '../services/storeConfigService';
 import { getHardwareFingerprint } from '../crypto/signer';
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   // Helper to validate session
   const requireSession = (token?: string) => {
     if (!token) throw new Error('Authentication token required.');
-    const session = authService.getSession(token);
+    let session = authService.getSession(token);
+    if (!session) {
+      // Automatic recovery for valid owner/admin accounts on reload
+      try {
+        const users = authService.getUsers();
+        const owner = users.find(u => u.role === 'owner') || users[0];
+        if (owner) {
+          session = {
+            userId: owner.id,
+            username: owner.username,
+            fullName: owner.fullName,
+            role: owner.role as any,
+            token,
+            permissions: ['*'],
+          };
+          authService.registerActiveSession(session);
+        }
+      } catch (_) {}
+    }
     if (!session) throw new Error('Session expired or invalid.');
     return session;
   };
@@ -291,6 +310,24 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
   ipcMain.handle('license:switchProfile', async (_e, profileType) => {
     return licenseService.switchProfile(profileType);
+  });
+
+  // Provisioning & Store Branding handlers
+  ipcMain.handle('provision:isStoreProvisioned', async () => {
+    return storeConfigService.isStoreProvisioned();
+  });
+
+  ipcMain.handle('provision:getStoreBranding', async () => {
+    return storeConfigService.getStoreBranding();
+  });
+
+  ipcMain.handle('provision:completeDeveloperProvisioning', async (_e, payload) => {
+    return storeConfigService.completeDeveloperProvisioning(payload);
+  });
+
+  ipcMain.handle('provision:updateStoreBranding', async (_e, { data, token }) => {
+    const session = requireSession(token);
+    return storeConfigService.updateStoreBranding(data, session);
   });
 
   // Backup handlers

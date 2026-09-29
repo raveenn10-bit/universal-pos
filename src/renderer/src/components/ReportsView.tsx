@@ -13,14 +13,13 @@ import {
   CreditCard,
   Download
 } from 'lucide-react';
-import { DashboardMetrics } from '../../../shared/types';
 
 interface ReportsViewProps {
   token: string;
 }
 
 export const ReportsView: React.FC<ReportsViewProps> = ({ token }) => {
-  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  const [metrics, setMetrics] = useState<any>(null);
   const [pnl, setPnl] = useState<{
     grossSalesMinor: number;
     discountsMinor: number;
@@ -155,7 +154,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ token }) => {
               Revenue Contribution by Category
             </h3>
             <div className="space-y-3">
-              {metrics?.categoryDistribution?.map((cat, idx) => (
+              {metrics?.categoryDistribution?.map((cat: any, idx: number) => (
                 <div key={idx}>
                   <div className="flex justify-between text-xs font-semibold mb-1">
                     <span className="text-slate-700 dark:text-slate-300">{cat.category}</span>
@@ -181,7 +180,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({ token }) => {
               Top Fast-Moving Products
             </h3>
             <div className="space-y-3">
-              {metrics?.topSoldItems?.map((item, idx) => (
+              {metrics?.topSoldItems?.map((item: any, idx: number) => (
                 <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-700/40">
                   <div className="flex items-center gap-3">
                     <span className="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/40 text-[#1a4cd2] dark:text-blue-300 text-xs font-black flex items-center justify-center">

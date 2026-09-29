@@ -9,7 +9,7 @@ import { TopSoldItems } from './components/TopSoldItems';
 import { FastCheckoutScreen } from './components/FastCheckoutScreen';
 import { TemplateEditor } from './components/TemplateEditor';
 import { SettingsView } from './components/SettingsView';
-import { SetupWizard } from './components/SetupWizard';
+import { InitialProvisioningWizard } from './components/InitialProvisioningWizard';
 import { CustomersView } from './components/CustomersView';
 import { ProductsView } from './components/ProductsView';
 import { OrdersView } from './components/OrdersView';
@@ -41,6 +41,8 @@ import {
 } from 'lucide-react';
 
 export const App: React.FC = () => {
+  const [isProvisioned, setIsProvisioned] = useState<boolean | null>(null);
+  const [storeBranding, setStoreBranding] = useState<any>(null);
   const [hasUsers, setHasUsers] = useState<boolean | null>(null);
   const [user, setUser] = useState<UserSession | null>(null);
   const [profileConfig, setProfileConfig] = useState<BusinessProfileConfig | null>(null);
@@ -85,26 +87,39 @@ export const App: React.FC = () => {
   const checkInitialState = async () => {
     try {
       const api = (window as any).apexApi;
+
+      // 1. Check if store is already provisioned
+      if (api?.provision?.isStoreProvisioned) {
+        const prov = await api.provision.isStoreProvisioned();
+        setIsProvisioned(prov);
+        if (!prov) {
+          // Terminal needs developer 1-time provisioning wizard first
+          return;
+        }
+        const branding = await api.provision.getStoreBranding();
+        setStoreBranding(branding);
+      } else {
+        setIsProvisioned(true);
+      }
       
-      // Load business profile configuration
+      // 2. Load business profile configuration
       if (api?.license?.getActiveProfileConfig) {
         const cfg = await api.license.getActiveProfileConfig();
         setProfileConfig(cfg);
         if (api?.window?.setTitle && cfg) {
-          api.window.setTitle(`Harsh Apex Universal POS - [${cfg.displayName}]`);
+          api.window.setTitle(`${storeBranding?.appName || 'Harsh Apex Universal POS'} - [${cfg.displayName}]`);
         }
       }
 
+      // 3. Check users and auto-login if default owner exists
       if (api?.auth?.checkHasUsers) {
         const usersExist = await api.auth.checkHasUsers();
         setHasUsers(usersExist);
         if (usersExist) {
-          // Attempt automatic production login with harshapex / chami2003
           try {
             const session = await api.auth.login({ username: 'harshapex', password: 'chami2003' });
             setUser(session);
           } catch {
-            // Keep on LoginScreen if password was modified
             setUser(null);
           }
           loadDashboardMetrics();
@@ -124,6 +139,7 @@ export const App: React.FC = () => {
     } catch (e) {
       console.error('Initial state error:', e);
       setHasUsers(true);
+      setIsProvisioned(true);
     }
   };
 
@@ -167,17 +183,20 @@ export const App: React.FC = () => {
     setProfileConfig(newConfig);
     const api = (window as any).apexApi;
     if (api?.window?.setTitle) {
-      api.window.setTitle(`Harsh Apex Universal POS - [${newConfig.displayName}]`);
+      api.window.setTitle(`${storeBranding?.appName || 'Harsh Apex Universal POS'} - [${newConfig.displayName}]`);
     }
   };
 
-  // If no users exist in database, display initial Setup Wizard
-  if (hasUsers === false) {
+  // If terminal has not undergone 1-Time Developer Provisioning, show wizard
+  if (isProvisioned === false) {
     return (
       <div className={isDark ? 'dark' : ''}>
-        <SetupWizard
-          onSetupComplete={(session) => {
-            setUser(session);
+        <InitialProvisioningWizard
+          onProvisionComplete={(res) => {
+            setUser(res.session);
+            setProfileConfig(res.profileConfig);
+            setStoreBranding(res.branding);
+            setIsProvisioned(true);
             setHasUsers(true);
             loadDashboardMetrics();
           }}
@@ -186,7 +205,7 @@ export const App: React.FC = () => {
     );
   }
 
-  // If users exist but no active session, show professional Login Screen
+  // If users exist but no active session, show professional Login Screen with dynamic branding
   if (!user) {
     return (
       <div className={isDark ? 'dark' : ''}>
@@ -198,6 +217,7 @@ export const App: React.FC = () => {
           isDark={isDark}
           onToggleDark={() => setIsDark(!isDark)}
           profileConfig={profileConfig}
+          branding={storeBranding}
         />
       </div>
     );
@@ -211,7 +231,9 @@ export const App: React.FC = () => {
         onSelectTab={setCurrentTab}
         isDark={isDark}
         onToggleDark={() => setIsDark(!isDark)}
-        businessName="Harsh Apex POS"
+        businessName={storeBranding?.businessName || 'Harsh Apex POS'}
+        appName={storeBranding?.appName}
+        appLogo={storeBranding?.appLogo}
         profileConfig={profileConfig}
         onLockScreen={() => setIsLocked(true)}
       />
@@ -225,6 +247,8 @@ export const App: React.FC = () => {
               loadDashboardMetrics();
             }}
             token={user.token}
+            profileConfig={profileConfig}
+            storeBranding={storeBranding}
           />
         ) : currentTab === 'customers' ? (
           <CustomersView token={user.token} />
@@ -252,6 +276,9 @@ export const App: React.FC = () => {
           <SettingsView 
             token={user.token} 
             onProfileChange={handleProfileChanged} 
+            onBrandingChange={(newBranding) => {
+              setStoreBranding(newBranding);
+            }}
           />
         ) : (
           /* CORE DASHBOARD VIEW */
@@ -268,6 +295,7 @@ export const App: React.FC = () => {
               onSearchChange={setSearchQuery}
               isDark={isDark}
               profileConfig={profileConfig}
+              branding={storeBranding}
             />
 
             {/* Dashboard Scrollable Workspace */}

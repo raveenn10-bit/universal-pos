@@ -12,25 +12,70 @@ import {
   Printer, 
   CheckCircle2, 
   X,
-  ArrowRight
+  ArrowRight,
+  Scale,
+  Footprints,
+  Smartphone,
+  Shirt,
+  Cpu,
+  Layers,
+  Sparkles,
+  ShoppingBag,
+  RotateCcw,
+  Tag,
+  ShieldCheck,
+  Check
 } from 'lucide-react';
-import { CartItem, Customer, Product, TenderPayment, Sale } from '../../../shared/types';
+import { CartItem, Customer, Product, TenderPayment, Sale, BusinessProfileConfig } from '../../../shared/types';
 
 interface FastCheckoutScreenProps {
   onBackToDashboard: () => void;
   token: string;
+  profileConfig?: BusinessProfileConfig | null;
+  storeBranding?: any;
 }
 
-export const FastCheckoutScreen: React.FC<FastCheckoutScreenProps> = ({ onBackToDashboard, token }) => {
+export const FastCheckoutScreen: React.FC<FastCheckoutScreenProps> = ({ 
+  onBackToDashboard, 
+  token,
+  profileConfig,
+  storeBranding 
+}) => {
+  const activeProfileType = profileConfig?.profileType || 'GENERAL_RETAIL';
+
+  // Catalog & Filter state
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
+  const [catalogSearch, setCatalogSearch] = useState('');
   const [barcodeInput, setBarcodeInput] = useState('');
+
+  // Cart & Transaction state
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [customersList, setCustomersList] = useState<Customer[]>([]);
   const [discountMinor, setDiscountMinor] = useState<number>(0);
   const [discountType, setDiscountType] = useState<'PERCENT' | 'FIXED'>('FIXED');
+  const [tradeInDeductionMinor, setTradeInDeductionMinor] = useState<number>(0);
   const [notes, setNotes] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [completedSale, setCompletedSale] = useState<Sale | null>(null);
+
+  // Industry-Specific Modals
+  const [scaleModalProduct, setScaleModalProduct] = useState<Product | null>(null);
+  const [scaleWeightKg, setScaleWeightKg] = useState<number>(1.0);
+  
+  const [shoeModalProduct, setShoeModalProduct] = useState<Product | null>(null);
+  const [selectedShoeSize, setSelectedShoeSize] = useState<string>('42');
+  const [selectedShoeColor, setSelectedShoeColor] = useState<string>('Black');
+
+  const [phoneModalProduct, setPhoneModalProduct] = useState<Product | null>(null);
+  const [phoneImei1, setPhoneImei1] = useState<string>('');
+  const [phoneImei2, setPhoneImei2] = useState<string>('');
+  const [phoneWarrantyMonths, setPhoneWarrantyMonths] = useState<number>(12);
+
+  const [apparelModalProduct, setApparelModalProduct] = useState<Product | null>(null);
+  const [selectedApparelSize, setSelectedApparelSize] = useState<string>('L');
 
   // Payment Modal state
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -47,17 +92,35 @@ export const FastCheckoutScreen: React.FC<FastCheckoutScreenProps> = ({ onBackTo
 
   useEffect(() => {
     barcodeInputRef.current?.focus();
+    loadCatalog();
     loadCustomers();
   }, []);
 
-  const loadCustomers = async () => {
+  const loadCatalog = async () => {
     try {
-      if ((window as any).apexApi?.customers?.searchCustomers) {
-        const custs = await (window as any).apexApi.customers.searchCustomers('');
-        setCustomersList(custs);
+      const api = (window as any).apexApi;
+      if (api?.catalog?.searchProducts) {
+        const prods = await api.catalog.searchProducts('', '');
+        setProducts(prods || []);
+      }
+      if (api?.catalog?.getCategories) {
+        const cats = await api.catalog.getCategories();
+        setCategories(cats || []);
       }
     } catch (e) {
-      console.error(e);
+      console.error('Error loading catalog:', e);
+    }
+  };
+
+  const loadCustomers = async () => {
+    try {
+      const api = (window as any).apexApi;
+      if (api?.customers?.searchCustomers) {
+        const custs = await api.customers.searchCustomers('');
+        setCustomersList(custs || []);
+      }
+    } catch (e) {
+      console.error('Error loading customers:', e);
     }
   };
 
@@ -77,45 +140,107 @@ export const FastCheckoutScreen: React.FC<FastCheckoutScreenProps> = ({ onBackTo
         return;
       }
 
-      // Add to cart
-      addToCart(product);
+      handleProductClick(product);
       setBarcodeInput('');
     } catch (err: any) {
       alert(err.message || 'Error scanning barcode');
     }
   };
 
-  const addToCart = (product: Product) => {
+  // Product Click Handler (Triggers Industry Modal or Direct Add)
+  const handleProductClick = (product: Product) => {
+    // 1. Supermarket Weight Scale
+    if (activeProfileType === 'SUPERMARKET' && (product.unitOfMeasure === 'KG' || product.unitOfMeasure === 'G' || product.name.toLowerCase().includes('weight') || product.name.toLowerCase().includes('apple'))) {
+      setScaleModalProduct(product);
+      setScaleWeightKg(1.0);
+      return;
+    }
+
+    // 2. Shoes Footwear Size Matrix
+    if (activeProfileType === 'SHOES' || product.name.toLowerCase().includes('shoe') || product.name.toLowerCase().includes('pegasus') || product.name.toLowerCase().includes('sneaker')) {
+      setShoeModalProduct(product);
+      setSelectedShoeSize('42');
+      setSelectedShoeColor('Black');
+      return;
+    }
+
+    // 3. Mobile Phones IMEI & Warranty
+    if (activeProfileType === 'MOBILE_PHONES' && (product.name.toLowerCase().includes('iphone') || product.name.toLowerCase().includes('galaxy') || product.name.toLowerCase().includes('phone') || product.costPriceMinor > 5000000)) {
+      setPhoneModalProduct(product);
+      setPhoneImei1(`35${Math.floor(1000000000000 + Math.random() * 9000000000000)}`);
+      setPhoneImei2(`35${Math.floor(1000000000000 + Math.random() * 9000000000000)}`);
+      setPhoneWarrantyMonths(12);
+      return;
+    }
+
+    // 4. Bags & Fashion Size Selection
+    if (activeProfileType === 'BAGS_FASHION' && (product.name.toLowerCase().includes('shirt') || product.name.toLowerCase().includes('dress') || product.name.toLowerCase().includes('jacket'))) {
+      setApparelModalProduct(product);
+      setSelectedApparelSize('L');
+      return;
+    }
+
+    // Default: Regular Add to Cart
+    addItemToCart(product, 10000);
+  };
+
+  const addItemToCart = (
+    product: Product, 
+    qtyScale4: number = 10000, 
+    metadata?: { note?: string; imei1?: string; imei2?: string; warranty?: number }
+  ) => {
     setCart((prev) => {
-      const idx = prev.findIndex(item => item.productId === product.id);
-      if (idx >= 0) {
-        const copy = [...prev];
-        const existing = copy[idx];
-        const newQtyScale4 = existing.quantityScale4 + 10000;
-        const lineTotal = Math.round((existing.unitPriceMinor * (newQtyScale4 / 10000)) - (existing.discountMinor || 0));
-        copy[idx] = {
-          ...existing,
-          quantityScale4: newQtyScale4,
-          lineTotalMinor: lineTotal,
-        };
-        return copy;
-      }
+      const lineCost = product.costPriceMinor;
+      const unitRetail = product.retailPriceMinor;
+      const rawQty = qtyScale4 / 10000;
+      const lineTotal = Math.round(unitRetail * rawQty);
 
       const newItem: CartItem = {
         productId: product.id,
-        productName: product.name,
+        productName: metadata?.note ? `${product.name} [${metadata.note}]` : product.name,
         sku: product.sku,
         barcode: product.barcode,
-        unitPriceMinor: product.retailPriceMinor,
-        unitCostMinor: product.costPriceMinor,
-        quantityScale4: 10000,
+        unitPriceMinor: unitRetail,
+        unitCostMinor: lineCost,
+        quantityScale4: qtyScale4,
         discountMinor: 0,
         taxRateBps: product.taxRateBps || 0,
         taxMinor: 0,
-        lineTotalMinor: product.retailPriceMinor,
+        lineTotalMinor: lineTotal,
       };
+
       return [...prev, newItem];
     });
+  };
+
+  const confirmScaleAdd = () => {
+    if (!scaleModalProduct || scaleWeightKg <= 0) return;
+    const qtyScale4 = Math.round(scaleWeightKg * 10000);
+    addItemToCart(scaleModalProduct, qtyScale4, { note: `${scaleWeightKg.toFixed(3)} kg` });
+    setScaleModalProduct(null);
+  };
+
+  const confirmShoeAdd = () => {
+    if (!shoeModalProduct) return;
+    addItemToCart(shoeModalProduct, 10000, { note: `EU ${selectedShoeSize} · ${selectedShoeColor}` });
+    setShoeModalProduct(null);
+  };
+
+  const confirmPhoneAdd = () => {
+    if (!phoneModalProduct) return;
+    addItemToCart(phoneModalProduct, 10000, { 
+      note: `IMEI: ${phoneImei1 || 'N/A'} · ${phoneWarrantyMonths}M Warranty`,
+      imei1: phoneImei1,
+      imei2: phoneImei2,
+      warranty: phoneWarrantyMonths,
+    });
+    setPhoneModalProduct(null);
+  };
+
+  const confirmApparelAdd = () => {
+    if (!apparelModalProduct) return;
+    addItemToCart(apparelModalProduct, 10000, { note: `Size: ${selectedApparelSize}` });
+    setApparelModalProduct(null);
   };
 
   const updateQuantity = (idx: number, deltaUnits: number) => {
@@ -141,17 +266,22 @@ export const FastCheckoutScreen: React.FC<FastCheckoutScreenProps> = ({ onBackTo
     setCart(prev => prev.filter((_, i) => i !== idx));
   };
 
-  // Calculations
+  const clearCart = () => {
+    setCart([]);
+    setDiscountMinor(0);
+    setTradeInDeductionMinor(0);
+  };
+
+  // Financial Calculations
   const subtotalMinor = cart.reduce((acc, it) => acc + Math.round(it.unitPriceMinor * (it.quantityScale4 / 10000)), 0);
   const taxMinor = cart.reduce((acc, it) => acc + (it.taxMinor || 0), 0);
-  const totalMinor = Math.max(0, subtotalMinor - discountMinor + taxMinor);
+  const totalMinor = Math.max(0, subtotalMinor - discountMinor - tradeInDeductionMinor + taxMinor);
 
   const openPayment = () => {
     if (cart.length === 0) {
-      alert('Cart is empty.');
+      alert('Cart is empty. Add products to proceed.');
       return;
     }
-    // Default tender: exact total in cash
     setTenderCashMinor(totalMinor);
     setTenderCardMinor(0);
     setTenderCreditMinor(0);
@@ -183,14 +313,14 @@ export const FastCheckoutScreen: React.FC<FastCheckoutScreenProps> = ({ onBackTo
         customerId: selectedCustomer?.id,
         discountMinor,
         discountType,
-        notes,
+        notes: notes ? `${notes} (Trade-In: LKR ${(tradeInDeductionMinor/100).toFixed(2)})` : '',
         idempotencyKey: `idm_${Date.now()}_${Math.random().toString(36).substring(7)}`,
       };
 
       const sale = await (window as any).apexApi.checkout.processSale(payload, token);
       setCompletedSale(sale);
       setShowPaymentModal(false);
-      setCart([]);
+      clearCart();
     } catch (err: any) {
       alert(err.message || 'Failed to complete sale');
     } finally {
@@ -217,40 +347,52 @@ export const FastCheckoutScreen: React.FC<FastCheckoutScreenProps> = ({ onBackTo
     }
   };
 
-  const handlePrintReceipt = async (saleId: string) => {
-    try {
-      await (window as any).apexApi.pdf.exportReceiptPdf(saleId);
-    } catch (e: any) {
-      alert(e.message || 'Failed to generate receipt PDF');
-    }
-  };
-
-  const handlePrintInvoice = async (saleId: string) => {
-    try {
-      await (window as any).apexApi.pdf.exportInvoicePdf(saleId);
-    } catch (e: any) {
-      alert(e.message || 'Failed to generate invoice PDF');
-    }
-  };
+  const filteredProducts = products.filter(p => {
+    const matchesCat = selectedCategory === 'ALL' || p.categoryId === selectedCategory;
+    const matchesSearch = !catalogSearch || 
+      p.name.toLowerCase().includes(catalogSearch.toLowerCase()) ||
+      p.sku.toLowerCase().includes(catalogSearch.toLowerCase()) ||
+      p.barcode.includes(catalogSearch);
+    return matchesCat && matchesSearch;
+  });
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-[#f8fafc] dark:bg-slate-900 select-none overflow-hidden">
-      {/* Top Header */}
-      <div className="h-16 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-6 flex items-center justify-between shrink-0">
+    <div className="flex-1 flex flex-col h-full bg-[#f4f7fb] dark:bg-slate-900 select-none overflow-hidden">
+      {/* TOP ACTION BAR */}
+      <header className="h-16 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-6 flex items-center justify-between shrink-0 shadow-sm z-10">
         <div className="flex items-center gap-4">
           <button
             onClick={onBackToDashboard}
-            className="text-xs font-semibold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700"
+            className="text-xs font-bold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 transition-all cursor-pointer"
           >
             ← Back to Dashboard
           </button>
-          <h1 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
+          
+          <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-            Fast Checkout Terminal
-          </h1>
+            <h1 className="text-base font-black text-slate-900 dark:text-white">
+              {storeBranding?.appName || 'Fast Checkout Terminal'}
+            </h1>
+            <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-900/30 text-[#1a4cd2] dark:text-blue-400 border border-blue-200 dark:border-blue-800">
+              {profileConfig?.displayName || 'Active Profile'}
+            </span>
+          </div>
         </div>
 
-        {/* Customer Selector / Quick-Add */}
+        {/* Barcode Quick Scanner Input */}
+        <form onSubmit={handleBarcodeSubmit} className="relative w-80">
+          <Barcode size={18} className="absolute left-3.5 top-2.5 text-[#1a4cd2]" />
+          <input
+            ref={barcodeInputRef}
+            type="text"
+            value={barcodeInput}
+            onChange={(e) => setBarcodeInput(e.target.value)}
+            placeholder="Scan barcode or enter SKU..."
+            className="w-full pl-10 pr-3 py-2 bg-slate-50 dark:bg-slate-700/60 border border-slate-200 dark:border-slate-600 rounded-xl text-xs font-bold focus:outline-none focus:border-[#1a4cd2]"
+          />
+        </form>
+
+        {/* Customer Selector & Quick Add */}
         <div className="flex items-center gap-2">
           <select
             value={selectedCustomer?.id || ''}
@@ -258,7 +400,7 @@ export const FastCheckoutScreen: React.FC<FastCheckoutScreenProps> = ({ onBackTo
               const c = customersList.find(x => x.id === e.target.value) || null;
               setSelectedCustomer(c);
             }}
-            className="text-xs font-medium bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2 text-slate-700 dark:text-slate-200 focus:outline-none"
+            className="text-xs font-bold bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2 text-slate-700 dark:text-slate-200 focus:outline-none"
           >
             <option value="">Walk-in Customer</option>
             {customersList.map((c) => (
@@ -270,332 +412,676 @@ export const FastCheckoutScreen: React.FC<FastCheckoutScreenProps> = ({ onBackTo
 
           <button
             onClick={() => setShowQuickAddCust(true)}
-            className="flex items-center gap-1.5 bg-blue-50 dark:bg-blue-900/30 text-[#1a4cd2] dark:text-blue-400 text-xs font-bold px-3 py-2 rounded-xl hover:bg-blue-100 transition-colors"
+            className="flex items-center gap-1.5 bg-blue-50 dark:bg-blue-900/30 text-[#1a4cd2] dark:text-blue-400 text-xs font-bold px-3 py-2 rounded-xl hover:bg-blue-100 transition-colors cursor-pointer"
           >
             <UserPlus size={14} />
-            <span>Quick-Add Customer</span>
+            <span>+ Customer</span>
           </button>
         </div>
-      </div>
+      </header>
 
-      {/* Main Workspace: 2-Columns (Cart Left, Summary Right) */}
+      {/* MAIN TWO-COLUMN WORKSPACE */}
       <div className="flex-1 flex overflow-hidden p-6 gap-6">
-        {/* Left: Barcode Scanner + Cart Table */}
-        <div className="flex-1 flex flex-col bg-white dark:bg-slate-800 rounded-3xl border border-slate-200/80 dark:border-slate-700 shadow-sm overflow-hidden">
-          {/* Barcode Search Bar */}
-          <form onSubmit={handleBarcodeSubmit} className="p-4 border-b border-slate-100 dark:border-slate-700">
-            <div className="relative">
-              <Barcode size={20} className="absolute left-4 top-3.5 text-[#1a4cd2]" />
-              <input
-                ref={barcodeInputRef}
-                type="text"
-                value={barcodeInput}
-                onChange={(e) => setBarcodeInput(e.target.value)}
-                placeholder="Scan or enter barcode / SKU and press Enter..."
-                className="w-full pl-12 pr-4 py-3 bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 rounded-2xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#1a4cd2]"
-              />
-            </div>
-          </form>
+        {/* LEFT COLUMN: INTERACTIVE PRODUCT CATALOG */}
+        <div className="flex-1 flex flex-col min-w-0 bg-white dark:bg-slate-800 rounded-3xl border border-slate-200/80 dark:border-slate-700 shadow-sm overflow-hidden">
+          {/* Category Pills & Search */}
+          <div className="p-4 border-b border-slate-100 dark:border-slate-700 space-y-3">
+            <div className="flex items-center justify-between gap-4">
+              <div className="relative flex-1">
+                <Search size={16} className="absolute left-3.5 top-2.5 text-slate-400" />
+                <input
+                  type="text"
+                  value={catalogSearch}
+                  onChange={(e) => setCatalogSearch(e.target.value)}
+                  placeholder="Search catalog by name, model or SKU..."
+                  className="w-full pl-10 pr-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-medium focus:outline-none focus:border-[#1a4cd2]"
+                />
+              </div>
 
-          {/* Cart Table */}
-          <div className="flex-1 overflow-y-auto p-4">
-            {cart.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                <Barcode size={48} className="stroke-1 text-slate-300 dark:text-slate-600 mb-3" />
-                <span className="text-sm font-medium">Cart is empty. Scan an item barcode to begin.</span>
+              {/* Special Industry Action Badges */}
+              {activeProfileType === 'MOBILE_PHONES' && (
+                <button
+                  onClick={() => {
+                    const tradeVal = prompt('Enter Trade-In Device Appraisal Credit (LKR):', '15000');
+                    if (tradeVal) {
+                      setTradeInDeductionMinor(Math.round(parseFloat(tradeVal) * 100));
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold hover:bg-purple-100 cursor-pointer"
+                >
+                  <RotateCcw size={14} />
+                  <span>+ Trade-In Deduct</span>
+                </button>
+              )}
+            </div>
+
+            {/* Category Filter Pills */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 custom-scrollbar">
+              <button
+                onClick={() => setSelectedCategory('ALL')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                  selectedCategory === 'ALL'
+                    ? 'bg-[#1a4cd2] text-white shadow-md shadow-blue-500/20'
+                    : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                }`}
+              >
+                All Items ({products.length})
+              </button>
+
+              {categories.map((cat) => (
+                <button
+                  key={cat.id}
+                  onClick={() => setSelectedCategory(cat.id)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                    selectedCategory === cat.id
+                      ? 'bg-[#1a4cd2] text-white shadow-md shadow-blue-500/20'
+                      : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                  }`}
+                >
+                  {cat.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Product Cards Grid */}
+          <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+            {filteredProducts.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-slate-400 space-y-2">
+                <ShoppingBag size={40} className="stroke-1" />
+                <p className="text-xs font-bold">No products found matching filters.</p>
               </div>
             ) : (
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="text-slate-400 border-b border-slate-100 dark:border-slate-700 font-semibold">
-                    <th className="pb-3 pl-2">Item Description</th>
-                    <th className="pb-3">Unit Price</th>
-                    <th className="pb-3 text-center">Quantity</th>
-                    <th className="pb-3 text-right">Line Total</th>
-                    <th className="pb-3 text-center w-12">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                  {cart.map((item, idx) => (
-                    <tr key={idx} className="hover:bg-slate-50/60 dark:hover:bg-slate-700/30">
-                      <td className="py-3 pl-2">
-                        <span className="font-bold text-slate-800 dark:text-white block text-sm">
-                          {item.productName}
-                        </span>
-                        <span className="text-[11px] text-slate-400">
-                          SKU: {item.sku} | Barcode: {item.barcode}
-                        </span>
-                      </td>
-                      <td className="py-3 font-semibold text-slate-700 dark:text-slate-300">
-                        LKR {(item.unitPriceMinor / 100).toFixed(2)}
-                      </td>
-                      <td className="py-3">
-                        <div className="flex items-center justify-center gap-2">
-                          <button
-                            onClick={() => updateQuantity(idx, -1)}
-                            className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-200"
-                          >
-                            <Minus size={13} />
-                          </button>
-                          <span className="w-8 text-center font-bold text-sm text-slate-800 dark:text-white">
-                            {item.quantityScale4 / 10000}
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3.5">
+                {filteredProducts.map((p) => {
+                  return (
+                    <div
+                      key={p.id}
+                      onClick={() => handleProductClick(p)}
+                      className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-700 hover:border-blue-400 dark:hover:border-blue-500 bg-white dark:bg-slate-800 hover:shadow-lg transition-all cursor-pointer group flex flex-col justify-between"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-[10px] font-mono font-bold text-slate-400 truncate max-w-[100px]">
+                            {p.sku}
                           </span>
-                          <button
-                            onClick={() => updateQuantity(idx, 1)}
-                            className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-200"
-                          >
-                            <Plus size={13} />
-                          </button>
+                          {p.unitOfMeasure === 'KG' ? (
+                            <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
+                              SCALE (KG)
+                            </span>
+                          ) : (
+                            <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                              {p.unitOfMeasure || 'PCS'}
+                            </span>
+                          )}
                         </div>
-                      </td>
-                      <td className="py-3 text-right font-black text-slate-800 dark:text-white text-sm">
-                        LKR {(item.lineTotalMinor / 100).toFixed(2)}
-                      </td>
-                      <td className="py-3 text-center">
-                        <button
-                          onClick={() => removeItem(idx)}
-                          className="text-slate-300 hover:text-red-500 transition-colors p-1"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+
+                        <h4 className="text-xs font-black text-slate-900 dark:text-white line-clamp-2 group-hover:text-[#1a4cd2] transition-colors">
+                          {p.name}
+                        </h4>
+                      </div>
+
+                      <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between">
+                        <span className="text-sm font-black text-[#1a4cd2] dark:text-blue-400">
+                          LKR {(p.retailPriceMinor / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </span>
+                        <div className="w-6 h-6 rounded-lg bg-blue-50 dark:bg-blue-900/40 text-[#1a4cd2] flex items-center justify-center group-hover:bg-[#1a4cd2] group-hover:text-white transition-all shadow-sm">
+                          <Plus size={14} />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
         </div>
 
-        {/* Right: Order Summary & Payment Button */}
-        <div className="w-96 flex flex-col justify-between bg-white dark:bg-slate-800 rounded-3xl border border-slate-200/80 dark:border-slate-700 shadow-sm p-6 shrink-0">
-          <div className="space-y-4">
-            <h2 className="text-base font-bold text-slate-800 dark:text-white border-b border-slate-100 dark:border-slate-700 pb-3">
-              Order Summary
-            </h2>
-
-            <div className="space-y-2.5 text-xs font-medium text-slate-500 dark:text-slate-400">
-              <div className="flex justify-between">
-                <span>Items Subtotal:</span>
-                <span className="font-bold text-slate-800 dark:text-white">
-                  LKR {(subtotalMinor / 100).toFixed(2)}
-                </span>
+        {/* RIGHT COLUMN: CART & CHECKOUT PANEL */}
+        <div className="w-96 flex flex-col bg-white dark:bg-slate-800 rounded-3xl border border-slate-200/80 dark:border-slate-700 shadow-sm overflow-hidden shrink-0">
+          {/* Cart Header */}
+          <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-900/30 text-[#1a4cd2] flex items-center justify-center font-black text-xs">
+                {cart.length}
+              </span>
+              <div>
+                <h3 className="text-xs font-black text-slate-900 dark:text-white">Active Order Cart</h3>
+                <span className="text-[10px] text-slate-400">{selectedCustomer ? selectedCustomer.name : 'Walk-in Customer'}</span>
               </div>
-
-              {/* Discount Input */}
-              <div className="flex items-center justify-between">
-                <span>Cart Discount:</span>
-                <input
-                  type="number"
-                  value={discountMinor / 100}
-                  onChange={(e) => setDiscountMinor(Math.round(parseFloat(e.target.value || '0') * 100))}
-                  className="w-24 text-right px-2 py-1 text-xs border border-slate-200 dark:border-slate-600 rounded-lg dark:bg-slate-700 dark:text-white font-bold"
-                  placeholder="0.00"
-                />
-              </div>
-
-              {taxMinor > 0 && (
-                <div className="flex justify-between">
-                  <span>Applicable Tax:</span>
-                  <span className="font-bold text-slate-800 dark:text-white">
-                    LKR {(taxMinor / 100).toFixed(2)}
-                  </span>
-                </div>
-              )}
             </div>
 
-            {/* Total Highlight */}
-            <div className="bg-[#f0f4ff] dark:bg-blue-950/40 p-4 rounded-2xl border border-blue-100 dark:border-blue-900/50 mt-4">
-              <span className="text-xs font-bold text-blue-600 dark:text-blue-400 block mb-1 uppercase tracking-wider">
-                Total Payable
-              </span>
-              <span className="text-3xl font-black text-[#1a4cd2] dark:text-blue-300 block">
-                LKR {(totalMinor / 100).toFixed(2)}
-              </span>
-            </div>
+            {cart.length > 0 && (
+              <button
+                onClick={clearCart}
+                className="text-[11px] font-bold text-rose-500 hover:text-rose-700 cursor-pointer"
+              >
+                Clear Cart
+              </button>
+            )}
           </div>
 
-          {/* Action Buttons */}
-          <div className="space-y-3 pt-4">
+          {/* Cart Items List */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-2.5 custom-scrollbar">
+            {cart.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-slate-400 space-y-2">
+                <Barcode size={32} className="stroke-1" />
+                <p className="text-xs font-bold">Cart is empty</p>
+                <p className="text-[10px] text-slate-400 text-center">Click products on left or scan barcode to add items.</p>
+              </div>
+            ) : (
+              cart.map((item, idx) => {
+                const rawQty = item.quantityScale4 / 10000;
+                return (
+                  <div key={idx} className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-700/50 border border-slate-100 dark:border-slate-600/60 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <h4 className="text-xs font-bold text-slate-900 dark:text-white leading-tight">
+                          {item.productName}
+                        </h4>
+                        <span className="text-[10px] font-mono text-slate-400">
+                          {item.sku} · LKR {(item.unitPriceMinor / 100).toFixed(2)}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => removeItem(idx)}
+                        className="text-slate-400 hover:text-rose-500 cursor-pointer p-1"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1">
+                      {/* Qty +/- */}
+                      <div className="flex items-center bg-white dark:bg-slate-600 rounded-xl border border-slate-200 dark:border-slate-500 overflow-hidden">
+                        <button
+                          onClick={() => updateQuantity(idx, -1)}
+                          className="px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-500 cursor-pointer text-slate-600 dark:text-slate-200"
+                        >
+                          <Minus size={11} />
+                        </button>
+                        <span className="px-2.5 text-xs font-black text-slate-800 dark:text-white">
+                          {rawQty >= 1 && Number.isInteger(rawQty) ? rawQty : rawQty.toFixed(3)}
+                        </span>
+                        <button
+                          onClick={() => updateQuantity(idx, 1)}
+                          className="px-2 py-1 hover:bg-slate-100 dark:hover:bg-slate-500 cursor-pointer text-slate-600 dark:text-slate-200"
+                        >
+                          <Plus size={11} />
+                        </button>
+                      </div>
+
+                      <span className="text-xs font-black text-[#1a4cd2] dark:text-blue-400">
+                        LKR {(item.lineTotalMinor / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Cart Summary & Pay Button */}
+          <div className="p-4 border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/30 space-y-2.5">
+            <div className="flex justify-between text-xs text-slate-500">
+              <span>Subtotal</span>
+              <span className="font-bold text-slate-800 dark:text-slate-200">
+                LKR {(subtotalMinor / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+
+            {tradeInDeductionMinor > 0 && (
+              <div className="flex justify-between text-xs text-purple-600 font-bold">
+                <span>Trade-In Credit</span>
+                <span>- LKR {(tradeInDeductionMinor / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+              </div>
+            )}
+
+            <div className="flex justify-between text-xs text-slate-500">
+              <span>Discount</span>
+              <span className="font-bold text-slate-800 dark:text-slate-200">
+                LKR {(discountMinor / 100).toFixed(2)}
+              </span>
+            </div>
+
+            <div className="pt-2 border-t border-slate-200 dark:border-slate-700 flex justify-between items-baseline">
+              <span className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                Total Due
+              </span>
+              <span className="text-lg font-black text-[#1a4cd2] dark:text-blue-400">
+                LKR {(totalMinor / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+
             <button
               onClick={openPayment}
               disabled={cart.length === 0}
-              className="w-full py-4 bg-[#1a4cd2] hover:bg-blue-700 disabled:opacity-50 text-white rounded-2xl font-bold text-base shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2"
+              className="w-full flex items-center justify-center gap-2 bg-[#1a4cd2] hover:bg-blue-700 text-white font-black text-sm py-3 rounded-2xl shadow-lg shadow-blue-500/25 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <span>Proceed to Payment</span>
-              <ArrowRight size={18} />
+              <span>Complete Sale [F9]</span>
+              <ArrowRight size={16} />
             </button>
           </div>
         </div>
       </div>
 
-      {/* Payment Tender Modal */}
+      {/* 1. SUPERMARKET WEIGHT SCALE MODAL */}
+      {scaleModalProduct && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-sm bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-emerald-600">
+                <Scale size={20} />
+                <h3 className="text-sm font-black text-slate-900 dark:text-white">Produce Weight Scale</h3>
+              </div>
+              <button onClick={() => setScaleModalProduct(null)} className="text-slate-400 hover:text-slate-600">
+                <X size={16} />
+              </button>
+            </div>
+
+            <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
+              {scaleModalProduct.name}
+            </p>
+
+            <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 rounded-2xl border border-emerald-200 text-center space-y-1">
+              <span className="text-[10px] text-emerald-700 font-bold block uppercase">Unit Price Rate</span>
+              <span className="text-base font-black text-emerald-700">
+                LKR {(scaleModalProduct.retailPriceMinor / 100).toFixed(2)} / kg
+              </span>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                Enter Measured Weight (Kilograms):
+              </label>
+              <input
+                type="number"
+                step="0.05"
+                min="0.01"
+                value={scaleWeightKg}
+                onChange={(e) => setScaleWeightKg(parseFloat(e.target.value) || 0)}
+                className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-600 text-lg font-black text-center focus:outline-none focus:border-emerald-500"
+                autoFocus
+              />
+            </div>
+
+            <div className="flex justify-between items-center text-xs font-bold text-slate-700 dark:text-slate-200">
+              <span>Calculated Amount:</span>
+              <span className="text-sm font-black text-emerald-600">
+                LKR {((scaleModalProduct.retailPriceMinor * scaleWeightKg) / 100).toFixed(2)}
+              </span>
+            </div>
+
+            <button
+              onClick={confirmScaleAdd}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs py-3 rounded-xl transition-all cursor-pointer shadow-md shadow-emerald-500/20"
+            >
+              Add Scaled Item to Cart
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 2. SHOES EU SIZE MATRIX MODAL */}
+      {shoeModalProduct && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-amber-600">
+                <Footprints size={20} />
+                <h3 className="text-sm font-black text-slate-900 dark:text-white">Footwear EU Size Matrix</h3>
+              </div>
+              <button onClick={() => setShoeModalProduct(null)} className="text-slate-400 hover:text-slate-600">
+                <X size={16} />
+              </button>
+            </div>
+
+            <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
+              {shoeModalProduct.name}
+            </p>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
+                Select EU Size:
+              </label>
+              <div className="grid grid-cols-4 gap-2">
+                {['38', '39', '40', '41', '42', '43', '44', '45'].map((sz) => (
+                  <button
+                    key={sz}
+                    onClick={() => setSelectedShoeSize(sz)}
+                    className={`py-2 rounded-xl text-xs font-black border transition-all cursor-pointer ${
+                      selectedShoeSize === sz
+                        ? 'bg-amber-500 text-white border-amber-600 shadow-md'
+                        : 'border-slate-200 dark:border-slate-700 hover:border-amber-400'
+                    }`}
+                  >
+                    EU {sz}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                Colorway:
+              </label>
+              <select
+                value={selectedShoeColor}
+                onChange={(e) => setSelectedShoeColor(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-600 text-xs font-bold"
+              >
+                <option value="Black">Triple Black</option>
+                <option value="White">Pure White</option>
+                <option value="Grey">Wolf Grey</option>
+                <option value="Navy">Navy Blue</option>
+              </select>
+            </div>
+
+            <button
+              onClick={confirmShoeAdd}
+              className="w-full bg-amber-600 hover:bg-amber-700 text-white font-black text-xs py-3 rounded-xl transition-all cursor-pointer shadow-md shadow-amber-500/20"
+            >
+              Add Selected Size to Cart
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 3. MOBILE PHONES DUAL IMEI & WARRANTY MODAL */}
+      {phoneModalProduct && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-indigo-600">
+                <Smartphone size={20} />
+                <h3 className="text-sm font-black text-slate-900 dark:text-white">Dual IMEI & Warranty Setup</h3>
+              </div>
+              <button onClick={() => setPhoneModalProduct(null)} className="text-slate-400 hover:text-slate-600">
+                <X size={16} />
+              </button>
+            </div>
+
+            <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
+              {phoneModalProduct.name}
+            </p>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Primary IMEI 1 (15 digits):
+                </label>
+                <input
+                  type="text"
+                  value={phoneImei1}
+                  onChange={(e) => setPhoneImei1(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-600 font-mono text-xs font-bold"
+                  placeholder="359123456789012"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Secondary IMEI 2 (eSIM / Dual):
+                </label>
+                <input
+                  type="text"
+                  value={phoneImei2}
+                  onChange={(e) => setPhoneImei2(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-600 font-mono text-xs font-bold"
+                  placeholder="359123456789013"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Warranty Coverage:
+                </label>
+                <select
+                  value={phoneWarrantyMonths}
+                  onChange={(e) => setPhoneWarrantyMonths(parseInt(e.target.value) || 0)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-600 text-xs font-bold"
+                >
+                  <option value={12}>1 Year Full Warranty (12 Months)</option>
+                  <option value={6}>6 Months Store Warranty</option>
+                  <option value={3}>3 Months Checking Warranty</option>
+                  <option value={0}>Out of Warranty / As-Is</option>
+                </select>
+              </div>
+            </div>
+
+            <button
+              onClick={confirmPhoneAdd}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs py-3 rounded-xl transition-all cursor-pointer shadow-md shadow-indigo-500/20"
+            >
+              Add Registered Phone to Cart
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 4. FASHION APPAREL SIZE MODAL */}
+      {apparelModalProduct && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-sm bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-rose-600">
+                <Shirt size={20} />
+                <h3 className="text-sm font-black text-slate-900 dark:text-white">Select Apparel Size</h3>
+              </div>
+              <button onClick={() => setApparelModalProduct(null)} className="text-slate-400 hover:text-slate-600">
+                <X size={16} />
+              </button>
+            </div>
+
+            <p className="text-xs font-bold text-slate-700 dark:text-slate-200">
+              {apparelModalProduct.name}
+            </p>
+
+            <div className="grid grid-cols-5 gap-2">
+              {['XS', 'S', 'M', 'L', 'XL', 'XXL'].map((sz) => (
+                <button
+                  key={sz}
+                  onClick={() => setSelectedApparelSize(sz)}
+                  className={`py-2 rounded-xl text-xs font-black border transition-all cursor-pointer ${
+                    selectedApparelSize === sz
+                      ? 'bg-rose-500 text-white border-rose-600 shadow-md'
+                      : 'border-slate-200 dark:border-slate-700 hover:border-rose-400'
+                  }`}
+                >
+                  {sz}
+                </button>
+              ))}
+            </div>
+
+            <button
+              onClick={confirmApparelAdd}
+              className="w-full bg-rose-600 hover:bg-rose-700 text-white font-black text-xs py-3 rounded-xl transition-all cursor-pointer shadow-md shadow-rose-500/20"
+            >
+              Add Apparel to Cart
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* MULTI-TENDER PAYMENT MODAL */}
       {showPaymentModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl border border-slate-100 dark:border-slate-700">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-700">
-              <h3 className="text-base font-bold text-slate-800 dark:text-white">
-                Payment Tender Breakdown
-              </h3>
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-2xl space-y-5">
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-black text-slate-900 dark:text-white">Tender Payment & Settlement</h3>
               <button onClick={() => setShowPaymentModal(false)} className="text-slate-400 hover:text-slate-600">
                 <X size={18} />
               </button>
             </div>
 
-            <div className="py-4 space-y-4">
-              <div className="text-center bg-slate-50 dark:bg-slate-700/50 py-3 rounded-2xl">
-                <span className="text-xs text-slate-400 block">Total Due</span>
-                <span className="text-2xl font-black text-[#1a4cd2] dark:text-blue-400">
-                  LKR {(totalMinor / 100).toFixed(2)}
-                </span>
-              </div>
+            <div className="p-4 rounded-2xl bg-blue-50/60 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900/50 text-center">
+              <span className="text-xs text-slate-500 dark:text-slate-400 block font-bold">Total Amount Due</span>
+              <span className="text-2xl font-black text-[#1a4cd2] dark:text-blue-400">
+                LKR {(totalMinor / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              </span>
+            </div>
 
-              {/* Cash Tender */}
+            <div className="space-y-3">
               <div>
-                <label className="text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1.5 mb-1">
-                  <Banknote size={15} className="text-emerald-500" />
-                  <span>Cash Payment (LKR)</span>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Cash Received (LKR)
                 </label>
                 <input
                   type="number"
+                  step="100"
                   value={tenderCashMinor / 100}
-                  onChange={(e) => setTenderCashMinor(Math.round(parseFloat(e.target.value || '0') * 100))}
-                  className="w-full px-3 py-2 text-sm font-bold border border-slate-200 dark:border-slate-600 rounded-xl dark:bg-slate-700 dark:text-white"
+                  onChange={(e) => setTenderCashMinor(Math.round((parseFloat(e.target.value) || 0) * 100))}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-600 text-xs font-bold focus:outline-none focus:border-[#1a4cd2]"
                 />
               </div>
 
-              {/* Card Tender */}
               <div>
-                <label className="text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1.5 mb-1">
-                  <CreditCard size={15} className="text-blue-500" />
-                  <span>Card Tender (LKR)</span>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Card / POS Terminal (LKR)
                 </label>
                 <input
                   type="number"
+                  step="100"
                   value={tenderCardMinor / 100}
-                  onChange={(e) => setTenderCardMinor(Math.round(parseFloat(e.target.value || '0') * 100))}
-                  className="w-full px-3 py-2 text-sm font-bold border border-slate-200 dark:border-slate-600 rounded-xl dark:bg-slate-700 dark:text-white"
+                  onChange={(e) => setTenderCardMinor(Math.round((parseFloat(e.target.value) || 0) * 100))}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-600 text-xs font-bold focus:outline-none focus:border-[#1a4cd2]"
                 />
               </div>
 
-              {/* Change calculation */}
-              {(tenderCashMinor + tenderCardMinor + tenderCreditMinor) > totalMinor && (
-                <div className="bg-emerald-50 dark:bg-emerald-950/40 p-3 rounded-xl flex justify-between items-center text-xs font-bold text-emerald-700 dark:text-emerald-300">
-                  <span>Change to Return:</span>
-                  <span className="text-base">
-                    LKR {(((tenderCashMinor + tenderCardMinor + tenderCreditMinor) - totalMinor) / 100).toFixed(2)}
-                  </span>
+              {selectedCustomer && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Store Credit / Ledger (LKR)
+                  </label>
+                  <input
+                    type="number"
+                    step="100"
+                    value={tenderCreditMinor / 100}
+                    onChange={(e) => setTenderCreditMinor(Math.round((parseFloat(e.target.value) || 0) * 100))}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-600 text-xs font-bold focus:outline-none focus:border-[#1a4cd2]"
+                  />
                 </div>
               )}
             </div>
 
-            <div className="flex gap-3 pt-2">
-              <button
-                onClick={() => setShowPaymentModal(false)}
-                className="flex-1 py-3 border border-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCompleteSale}
-                disabled={isProcessing}
-                className="flex-1 py-3 bg-[#1a4cd2] text-white rounded-xl text-xs font-bold hover:bg-blue-700 shadow-md"
-              >
-                {isProcessing ? 'Processing...' : 'Confirm Sale (F12)'}
-              </button>
+            {/* Change balance */}
+            <div className="p-3 bg-slate-50 dark:bg-slate-700/50 rounded-xl flex justify-between text-xs font-bold">
+              <span>Change Due:</span>
+              <span className="text-emerald-600 font-black">
+                LKR {Math.max(0, ((tenderCashMinor + tenderCardMinor + tenderCreditMinor) - totalMinor) / 100).toFixed(2)}
+              </span>
             </div>
+
+            <button
+              onClick={handleCompleteSale}
+              disabled={isProcessing}
+              className="w-full bg-[#1a4cd2] hover:bg-blue-700 text-white font-black text-xs py-3.5 rounded-2xl shadow-lg shadow-blue-500/25 transition-all cursor-pointer disabled:opacity-50"
+            >
+              {isProcessing ? 'Processing Transaction...' : 'Confirm & Complete Sale'}
+            </button>
           </div>
         </div>
       )}
 
-      {/* Sale Success Dialog with PDF Export */}
+      {/* COMPLETED SALE MODAL */}
       {completedSale && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-3xl w-full max-w-md p-6 text-center shadow-2xl">
-            <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-3">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-2xl text-center space-y-4">
+            <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
               <CheckCircle2 size={32} />
             </div>
-            <h3 className="text-lg font-bold text-slate-800 dark:text-white">
+
+            <h3 className="text-lg font-black text-slate-900 dark:text-white">
               Sale Completed Successfully!
             </h3>
-            <p className="text-xs text-slate-500 mt-1 mb-4">
-              Invoice #{completedSale.invoiceNumber} | Total: LKR {(completedSale.totalMinor / 100).toFixed(2)}
+            <p className="text-xs text-slate-400 font-mono">
+              Invoice #{completedSale.invoiceNumber || completedSale.id.substring(0, 10)}
             </p>
 
-            <div className="space-y-2 pt-2">
+            <div className="grid grid-cols-2 gap-3 pt-2">
               <button
-                onClick={() => handlePrintReceipt(completedSale.id)}
-                className="w-full py-3 bg-[#1a4cd2] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 hover:bg-blue-700 shadow"
+                onClick={async () => {
+                  try {
+                    await (window as any).apexApi.pdf.exportReceiptPdf(completedSale.id);
+                  } catch (e: any) {
+                    alert('Print failed: ' + e.message);
+                  }
+                }}
+                className="flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-100 text-xs font-bold py-2.5 rounded-xl cursor-pointer"
               >
-                <Printer size={16} />
-                <span>Save 80mm Receipt PDF</span>
+                <Printer size={15} />
+                <span>80mm Receipt</span>
               </button>
 
               <button
-                onClick={() => handlePrintInvoice(completedSale.id)}
-                className="w-full py-3 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold flex items-center justify-center gap-2 hover:bg-slate-200"
+                onClick={async () => {
+                  try {
+                    await (window as any).apexApi.pdf.exportInvoicePdf(completedSale.id);
+                  } catch (e: any) {
+                    alert('Print failed: ' + e.message);
+                  }
+                }}
+                className="flex items-center justify-center gap-2 bg-[#1a4cd2] hover:bg-blue-700 text-white text-xs font-bold py-2.5 rounded-xl cursor-pointer"
               >
-                <FileText size={16} />
-                <span>Save A4 Tax Invoice PDF</span>
-              </button>
-
-              <button
-                onClick={() => setCompletedSale(null)}
-                className="w-full py-2.5 text-xs text-slate-400 hover:text-slate-600 font-semibold"
-              >
-                Close & Next Customer
+                <FileText size={15} />
+                <span>A4 Tax Invoice</span>
               </button>
             </div>
+
+            <button
+              onClick={() => setCompletedSale(null)}
+              className="w-full border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold py-2 rounded-xl hover:bg-slate-50 cursor-pointer mt-2"
+            >
+              Start Next Sale
+            </button>
           </div>
         </div>
       )}
 
-      {/* Quick Add Customer Modal */}
+      {/* QUICK ADD CUSTOMER MODAL */}
       {showQuickAddCust && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <form onSubmit={handleQuickAddCustomer} className="bg-white dark:bg-slate-800 rounded-3xl w-full max-w-sm p-6 shadow-2xl">
-            <h3 className="text-base font-bold text-slate-800 dark:text-white mb-4">
-              Quick Register Customer
-            </h3>
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-bold text-slate-600 block mb-1">Customer Name</label>
-                <input
-                  type="text"
-                  required
-                  value={newCustName}
-                  onChange={(e) => setNewCustName(e.target.value)}
-                  placeholder="e.g. Ruwan Perera"
-                  className="w-full px-3 py-2 border rounded-xl text-xs font-medium"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-bold text-slate-600 block mb-1">Phone Number</label>
-                <input
-                  type="text"
-                  required
-                  value={newCustPhone}
-                  onChange={(e) => setNewCustPhone(e.target.value)}
-                  placeholder="0771234567"
-                  className="w-full px-3 py-2 border rounded-xl text-xs font-medium"
-                />
-              </div>
-            </div>
-            <div className="flex gap-2 mt-5">
-              <button
-                type="button"
-                onClick={() => setShowQuickAddCust(false)}
-                className="flex-1 py-2 text-xs font-bold border rounded-xl"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="flex-1 py-2 text-xs font-bold bg-[#1a4cd2] text-white rounded-xl"
-              >
-                Save & Select
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <form onSubmit={handleQuickAddCustomer} className="w-full max-w-sm bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-black text-slate-900 dark:text-white">Quick Add Customer</h3>
+              <button type="button" onClick={() => setShowQuickAddCust(false)} className="text-slate-400">
+                <X size={16} />
               </button>
             </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                Full Name
+              </label>
+              <input
+                type="text"
+                value={newCustName}
+                onChange={(e) => setNewCustName(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-600 text-xs font-bold focus:outline-none"
+                required
+                autoFocus
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                Phone Number
+              </label>
+              <input
+                type="text"
+                value={newCustPhone}
+                onChange={(e) => setNewCustPhone(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-600 text-xs font-bold focus:outline-none"
+                required
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="w-full bg-[#1a4cd2] text-white font-black text-xs py-2.5 rounded-xl cursor-pointer"
+            >
+              Save & Attach Customer
+            </button>
           </form>
         </div>
       )}

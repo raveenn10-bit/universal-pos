@@ -95,6 +95,12 @@ const api = {
     importProvisioningPackage: (pkg: any) => ipcRenderer.invoke('license:importProvisioningPackage', pkg),
     switchProfile: (profileType: string) => ipcRenderer.invoke('license:switchProfile', profileType),
   },
+  provision: {
+    isStoreProvisioned: () => ipcRenderer.invoke('provision:isStoreProvisioned'),
+    getStoreBranding: () => ipcRenderer.invoke('provision:getStoreBranding'),
+    completeDeveloperProvisioning: (payload: any) => ipcRenderer.invoke('provision:completeDeveloperProvisioning', payload),
+    updateStoreBranding: (data: any, token: string) => ipcRenderer.invoke('provision:updateStoreBranding', { data, token }),
+  },
   backup: {
     createBackup: (token: string) => ipcRenderer.invoke('backup:createBackup', token),
     restoreBackup: (backupPath: string, token: string) => ipcRenderer.invoke('backup:restoreBackup', { backupPath, token }),
