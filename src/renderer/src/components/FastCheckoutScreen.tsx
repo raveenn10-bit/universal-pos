@@ -27,6 +27,7 @@ import {
   Check
 } from 'lucide-react';
 import { CartItem, Customer, Product, TenderPayment, Sale, BusinessProfileConfig } from '../../../shared/types';
+import { PrintPreviewModal } from './PrintPreviewModal';
 
 interface FastCheckoutScreenProps {
   onBackToDashboard: () => void;
@@ -60,6 +61,8 @@ export const FastCheckoutScreen: React.FC<FastCheckoutScreenProps> = ({
   const [notes, setNotes] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [completedSale, setCompletedSale] = useState<Sale | null>(null);
+  const [showPrintModal, setShowPrintModal] = useState(false);
+  const [printDocType, setPrintDocType] = useState<'RECEIPT' | 'INVOICE'>('RECEIPT');
 
   // Industry-Specific Modals
   const [scaleModalProduct, setScaleModalProduct] = useState<Product | null>(null);
@@ -381,14 +384,14 @@ export const FastCheckoutScreen: React.FC<FastCheckoutScreenProps> = ({
 
         {/* Barcode Quick Scanner Input */}
         <form onSubmit={handleBarcodeSubmit} className="relative w-80">
-          <Barcode size={18} className="absolute left-3.5 top-2.5 text-[#1a4cd2]" />
+          <Barcode size={18} className="absolute left-3.5 top-2.5 text-[#1a4cd2] dark:text-blue-400" />
           <input
             ref={barcodeInputRef}
             type="text"
             value={barcodeInput}
             onChange={(e) => setBarcodeInput(e.target.value)}
             placeholder="Scan barcode or enter SKU..."
-            className="w-full pl-10 pr-3 py-2 bg-slate-50 dark:bg-slate-700/60 border border-slate-200 dark:border-slate-600 rounded-xl text-xs font-bold focus:outline-none focus:border-[#1a4cd2]"
+            className="w-full pl-10 pr-3 py-2 bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl text-xs font-bold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:outline-none focus:border-[#1a4cd2]"
           />
         </form>
 
@@ -400,7 +403,7 @@ export const FastCheckoutScreen: React.FC<FastCheckoutScreenProps> = ({
               const c = customersList.find(x => x.id === e.target.value) || null;
               setSelectedCustomer(c);
             }}
-            className="text-xs font-bold bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2 text-slate-700 dark:text-slate-200 focus:outline-none"
+            className="text-xs font-bold bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none"
           >
             <option value="">Walk-in Customer</option>
             {customersList.map((c) => (
@@ -412,7 +415,7 @@ export const FastCheckoutScreen: React.FC<FastCheckoutScreenProps> = ({
 
           <button
             onClick={() => setShowQuickAddCust(true)}
-            className="flex items-center gap-1.5 bg-blue-50 dark:bg-blue-900/30 text-[#1a4cd2] dark:text-blue-400 text-xs font-bold px-3 py-2 rounded-xl hover:bg-blue-100 transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 bg-blue-50 dark:bg-blue-900/40 text-[#1a4cd2] dark:text-blue-300 text-xs font-bold px-3 py-2 rounded-xl hover:bg-blue-100 dark:hover:bg-blue-800/40 transition-colors cursor-pointer"
           >
             <UserPlus size={14} />
             <span>+ Customer</span>
@@ -434,7 +437,7 @@ export const FastCheckoutScreen: React.FC<FastCheckoutScreenProps> = ({
                   value={catalogSearch}
                   onChange={(e) => setCatalogSearch(e.target.value)}
                   placeholder="Search catalog by name, model or SKU..."
-                  className="w-full pl-10 pr-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-medium focus:outline-none focus:border-[#1a4cd2]"
+                  className="w-full pl-10 pr-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-700/60 border border-slate-300 dark:border-slate-600 text-xs font-bold text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-400 focus:outline-none focus:border-[#1a4cd2]"
                 />
               </div>
 
@@ -447,7 +450,7 @@ export const FastCheckoutScreen: React.FC<FastCheckoutScreenProps> = ({
                       setTradeInDeductionMinor(Math.round(parseFloat(tradeVal) * 100));
                     }
                   }}
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-purple-50 text-purple-700 border border-purple-200 text-xs font-bold hover:bg-purple-100 cursor-pointer"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 text-xs font-bold hover:bg-purple-100 cursor-pointer"
                 >
                   <RotateCcw size={14} />
                   <span>+ Trade-In Deduct</span>
@@ -462,7 +465,7 @@ export const FastCheckoutScreen: React.FC<FastCheckoutScreenProps> = ({
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                   selectedCategory === 'ALL'
                     ? 'bg-[#1a4cd2] text-white shadow-md shadow-blue-500/20'
-                    : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                    : 'bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-100 hover:bg-slate-200 dark:hover:bg-slate-600'
                 }`}
               >
                 All Items ({products.length})
@@ -475,7 +478,7 @@ export const FastCheckoutScreen: React.FC<FastCheckoutScreenProps> = ({
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                     selectedCategory === cat.id
                       ? 'bg-[#1a4cd2] text-white shadow-md shadow-blue-500/20'
-                      : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+                      : 'bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-100 hover:bg-slate-200 dark:hover:bg-slate-600'
                   }`}
                 >
                   {cat.name}
@@ -983,45 +986,48 @@ export const FastCheckoutScreen: React.FC<FastCheckoutScreenProps> = ({
         </div>
       )}
 
-      {/* COMPLETED SALE MODAL */}
+      {/* COMPLETED SALE SUCCESS MODAL */}
       {completedSale && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-2xl text-center space-y-4">
-            <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
+        <div className="fixed inset-0 bg-slate-950/75 backdrop-blur-sm z-40 flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-2xl text-center space-y-4 border border-slate-200 dark:border-slate-700">
+            <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400 flex items-center justify-center mx-auto">
               <CheckCircle2 size={32} />
             </div>
 
-            <h3 className="text-lg font-black text-slate-900 dark:text-white">
+            <h3 className="text-xl font-black text-slate-900 dark:text-white">
               Sale Completed Successfully!
             </h3>
-            <p className="text-xs text-slate-400 font-mono">
-              Invoice #{completedSale.invoiceNumber || completedSale.id.substring(0, 10)}
-            </p>
+
+            <div className="inline-flex items-center gap-2 bg-slate-100 dark:bg-slate-700/80 px-3.5 py-1.5 rounded-full border border-slate-200 dark:border-slate-600">
+              <span className="text-xs font-mono font-bold text-slate-800 dark:text-slate-100">
+                Invoice #{completedSale.invoiceNumber || completedSale.id.substring(0, 10)}
+              </span>
+            </div>
+
+            <div className="text-2xl font-black text-[#1a4cd2] dark:text-blue-400">
+              LKR {(completedSale.totalMinor / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+            </div>
 
             <div className="grid grid-cols-2 gap-3 pt-2">
               <button
-                onClick={async () => {
-                  try {
-                    await (window as any).apexApi.pdf.exportReceiptPdf(completedSale.id);
-                  } catch (e: any) {
-                    alert('Print failed: ' + e.message);
-                  }
+                type="button"
+                onClick={() => {
+                  setPrintDocType('RECEIPT');
+                  setShowPrintModal(true);
                 }}
-                className="flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-100 text-xs font-bold py-2.5 rounded-xl cursor-pointer"
+                className="flex items-center justify-center gap-2 bg-slate-900 hover:bg-black dark:bg-slate-700 dark:hover:bg-slate-600 text-white text-xs font-black py-3 rounded-xl shadow-md cursor-pointer transition-all"
               >
                 <Printer size={15} />
                 <span>80mm Receipt</span>
               </button>
 
               <button
-                onClick={async () => {
-                  try {
-                    await (window as any).apexApi.pdf.exportInvoicePdf(completedSale.id);
-                  } catch (e: any) {
-                    alert('Print failed: ' + e.message);
-                  }
+                type="button"
+                onClick={() => {
+                  setPrintDocType('INVOICE');
+                  setShowPrintModal(true);
                 }}
-                className="flex items-center justify-center gap-2 bg-[#1a4cd2] hover:bg-blue-700 text-white text-xs font-bold py-2.5 rounded-xl cursor-pointer"
+                className="flex items-center justify-center gap-2 bg-[#1a4cd2] hover:bg-blue-700 text-white text-xs font-black py-3 rounded-xl shadow-md shadow-blue-500/20 cursor-pointer transition-all"
               >
                 <FileText size={15} />
                 <span>A4 Tax Invoice</span>
@@ -1029,14 +1035,27 @@ export const FastCheckoutScreen: React.FC<FastCheckoutScreenProps> = ({
             </div>
 
             <button
-              onClick={() => setCompletedSale(null)}
-              className="w-full border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold py-2 rounded-xl hover:bg-slate-50 cursor-pointer mt-2"
+              type="button"
+              onClick={() => {
+                setCompletedSale(null);
+                setShowPrintModal(false);
+              }}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black py-3 rounded-xl shadow-md shadow-emerald-500/20 cursor-pointer transition-all mt-2"
             >
-              Start Next Sale
+              Start Next Sale [F1]
             </button>
           </div>
         </div>
       )}
+
+      {/* DEDICATED PRINT PREVIEW & DIRECT PRINT MODAL */}
+      <PrintPreviewModal
+        isOpen={showPrintModal}
+        onClose={() => setShowPrintModal(false)}
+        sale={completedSale}
+        branding={storeBranding}
+        defaultType={printDocType}
+      />
 
       {/* QUICK ADD CUSTOMER MODAL */}
       {showQuickAddCust && (

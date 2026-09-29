@@ -6,6 +6,7 @@ import PDFDocument from 'pdfkit';
 import QRCode from 'qrcode';
 import { Sale, Customer, CustomerTransaction, Shift, DocumentTemplate } from '../../shared/types';
 import { DEFAULT_RECEIPT_TEMPLATE, DEFAULT_INVOICE_TEMPLATE } from '../../shared/constants';
+import * as storeConfigService from './storeConfigService';
 
 export interface GeneratePdfResult {
   filePath: string;
@@ -21,7 +22,16 @@ export async function generateReceiptPdf(
   outputPath: string,
   customTemplate?: DocumentTemplate
 ): Promise<GeneratePdfResult> {
-  const tpl = customTemplate || DEFAULT_RECEIPT_TEMPLATE;
+  const tpl = JSON.parse(JSON.stringify(customTemplate || DEFAULT_RECEIPT_TEMPLATE));
+  try {
+    const branding = storeConfigService.getStoreBranding();
+    if (branding && branding.businessName) {
+      tpl.config.businessName = branding.businessName;
+      if (branding.address) tpl.config.address = branding.address;
+      if (branding.phone) tpl.config.phone = branding.phone;
+      if (branding.taxId) tpl.config.taxNumber = branding.taxId;
+    }
+  } catch {}
   const is58mm = tpl.templateType === 'RECEIPT_58MM';
   const pageWidth = is58mm ? 164 : 226; // points (72 pt/inch)
   
@@ -185,7 +195,16 @@ export async function generateA4InvoicePdf(
   outputPath: string,
   customTemplate?: DocumentTemplate
 ): Promise<GeneratePdfResult> {
-  const tpl = customTemplate || DEFAULT_INVOICE_TEMPLATE;
+  const tpl = JSON.parse(JSON.stringify(customTemplate || DEFAULT_INVOICE_TEMPLATE));
+  try {
+    const branding = storeConfigService.getStoreBranding();
+    if (branding && branding.businessName) {
+      tpl.config.businessName = branding.businessName;
+      if (branding.address) tpl.config.address = branding.address;
+      if (branding.phone) tpl.config.phone = branding.phone;
+      if (branding.taxId) tpl.config.taxNumber = branding.taxId;
+    }
+  } catch {}
   const primaryCoral = '#EE4D38'; // Matches sample image coral/red accent
   const darkText = '#2D3748';
   const mutedText = '#718096';

@@ -85,6 +85,8 @@ const api = {
     receive: (supplierId: string, items: any[], notes: string, token: string) => ipcRenderer.invoke('purchases:receive', { supplierId, items, notes, token }),
   },
   pdf: {
+    printReceipt: (saleId: string) => ipcRenderer.invoke('pdf:printReceipt', saleId),
+    printInvoice: (saleId: string) => ipcRenderer.invoke('pdf:printInvoice', saleId),
     exportReceiptPdf: (saleId: string) => ipcRenderer.invoke('pdf:exportReceiptPdf', saleId),
     exportInvoicePdf: (saleId: string) => ipcRenderer.invoke('pdf:exportInvoicePdf', saleId),
     exportStatementPdf: (customerId: string) => ipcRenderer.invoke('pdf:exportStatementPdf', customerId),

@@ -1,5 +1,6 @@
 // Harsh Apex Universal POS - Main Process IPC Handlers
-import { ipcMain, dialog, BrowserWindow } from 'electron';
+import { ipcMain, dialog, BrowserWindow, shell, app } from 'electron';
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import * as authService from '../services/authService';
@@ -253,7 +254,42 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     return reportService.getProfitAndLoss(fromDate, toDate);
   });
 
-  // PDF Export handlers
+  // PDF Direct Print Handlers (Instantly generates to archive and opens ready to print)
+  ipcMain.handle('pdf:printReceipt', async (_e, saleId) => {
+    const sale = checkoutService.getSaleById(saleId);
+    if (!sale) throw new Error('Sale record not found.');
+
+    const receiptsDir = path.join(app.getPath('userData'), 'receipts');
+    if (!fs.existsSync(receiptsDir)) fs.mkdirSync(receiptsDir, { recursive: true });
+    const targetPath = path.join(receiptsDir, `Receipt-${sale.invoiceNumber}.pdf`);
+
+    const result = await pdfService.generateReceiptPdf(sale, targetPath);
+    try {
+      await shell.openPath(targetPath);
+    } catch (err) {
+      console.error('Error opening receipt PDF:', err);
+    }
+    return result;
+  });
+
+  ipcMain.handle('pdf:printInvoice', async (_e, saleId) => {
+    const sale = checkoutService.getSaleById(saleId);
+    if (!sale) throw new Error('Sale record not found.');
+
+    const invoicesDir = path.join(app.getPath('userData'), 'invoices');
+    if (!fs.existsSync(invoicesDir)) fs.mkdirSync(invoicesDir, { recursive: true });
+    const targetPath = path.join(invoicesDir, `Invoice-${sale.invoiceNumber}.pdf`);
+
+    const result = await pdfService.generateA4InvoicePdf(sale, targetPath);
+    try {
+      await shell.openPath(targetPath);
+    } catch (err) {
+      console.error('Error opening invoice PDF:', err);
+    }
+    return result;
+  });
+
+  // PDF Save Dialog handlers
   ipcMain.handle('pdf:exportReceiptPdf', async (_e, saleId) => {
     const sale = checkoutService.getSaleById(saleId);
     if (!sale) throw new Error('Sale record not found.');

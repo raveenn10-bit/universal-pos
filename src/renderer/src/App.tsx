@@ -47,7 +47,15 @@ export const App: React.FC = () => {
   const [user, setUser] = useState<UserSession | null>(null);
   const [profileConfig, setProfileConfig] = useState<BusinessProfileConfig | null>(null);
   const [currentTab, setCurrentTab] = useState<NavTab>('dashboard');
-  const [isDark, setIsDark] = useState(false);
+  const [isDark, setIsDark] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('apex_theme');
+      if (saved) return saved === 'dark';
+      return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    } catch {
+      return false;
+    }
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [metrics, setMetrics] = useState<any>(null);
 
@@ -55,6 +63,22 @@ export const App: React.FC = () => {
   const [isLocked, setIsLocked] = useState(false);
   const [isPassportOpen, setIsPassportOpen] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (isDark) {
+        document.documentElement.classList.add('dark');
+        document.body.classList.add('dark');
+        localStorage.setItem('apex_theme', 'dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+        document.body.classList.remove('dark');
+        localStorage.setItem('apex_theme', 'light');
+      }
+    } catch (e) {
+      console.error('Error syncing theme:', e);
+    }
+  }, [isDark]);
 
   useEffect(() => {
     checkInitialState();
