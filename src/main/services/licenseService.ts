@@ -144,3 +144,21 @@ export function importProvisioningPackage(
     profileConfig: activeConfig,
   };
 }
+
+export function switchProfile(profileType: BusinessProfileType): BusinessProfileConfig {
+  const baseProfile = DEFAULT_BUSINESS_PROFILES[profileType];
+  if (!baseProfile) {
+    throw new Error(`Unsupported business profile type: ${profileType}`);
+  }
+  const db = getDb();
+  db.prepare(`
+    INSERT INTO business_profile_config (id, profile_type, config_json, updated_at)
+    VALUES (1, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      profile_type = excluded.profile_type,
+      config_json = excluded.config_json,
+      updated_at = excluded.updated_at
+  `).run(profileType, JSON.stringify(baseProfile), new Date().toISOString());
+
+  return baseProfile;
+}

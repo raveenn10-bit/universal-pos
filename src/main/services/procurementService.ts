@@ -174,3 +174,28 @@ export function receiveGoods(
 
   return { poNumber, totalCostMinor };
 }
+
+export function listPurchaseOrders(): any[] {
+  const db = getDb();
+  const rows = db.prepare(`
+    SELECT po.*, s.name as supplier_name, COUNT(poi.id) as items_count
+    FROM purchase_orders po
+    LEFT JOIN suppliers s ON po.supplier_id = s.id
+    LEFT JOIN purchase_items poi ON po.id = poi.purchase_order_id
+    GROUP BY po.id
+    ORDER BY po.created_at DESC
+  `).all() as any[];
+
+  return rows.map(r => ({
+    id: r.id,
+    poNumber: r.po_number,
+    supplierId: r.supplier_id,
+    supplierName: r.supplier_name || 'Authorized Supplier',
+    orderDate: r.order_date,
+    status: r.status,
+    totalCostMinor: r.total_cost_minor,
+    itemsCount: r.items_count || 1,
+    notes: r.notes || undefined,
+    createdAt: r.created_at,
+  }));
+}

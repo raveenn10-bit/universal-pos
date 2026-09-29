@@ -688,6 +688,108 @@ function runMigrations(db: ApexDatabase): void {
         `);
       },
     },
+    {
+      version: 2,
+      name: 'add_roles_repairs_tradein_expenses',
+      up: (d) => {
+        d.exec(`
+          -- Roles & Granular Permissions
+          CREATE TABLE IF NOT EXISTS roles (
+            id TEXT PRIMARY KEY,
+            name TEXT UNIQUE NOT NULL,
+            description TEXT,
+            permissions_json TEXT NOT NULL,
+            is_system INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL
+          );
+
+          -- Repairs & Service Tickets
+          CREATE TABLE IF NOT EXISTS repair_tickets (
+            id TEXT PRIMARY KEY,
+            ticket_number TEXT UNIQUE NOT NULL,
+            customer_name TEXT NOT NULL,
+            customer_phone TEXT NOT NULL,
+            customer_email TEXT,
+            device_model TEXT NOT NULL,
+            imei_or_serial TEXT,
+            passcode TEXT,
+            fault_description TEXT NOT NULL,
+            physical_condition TEXT,
+            status TEXT NOT NULL DEFAULT 'Received',
+            estimated_cost_minor INTEGER NOT NULL DEFAULT 0,
+            advance_paid_minor INTEGER NOT NULL DEFAULT 0,
+            technician_notes TEXT,
+            parts_used_json TEXT,
+            assigned_technician TEXT,
+            created_at TEXT NOT NULL,
+            completed_at TEXT
+          );
+
+          -- Phone & Electronics Trade-In / Exchange
+          CREATE TABLE IF NOT EXISTS trade_ins (
+            id TEXT PRIMARY KEY,
+            trade_in_number TEXT UNIQUE NOT NULL,
+            customer_name TEXT NOT NULL,
+            customer_phone TEXT NOT NULL,
+            brand TEXT NOT NULL,
+            model TEXT NOT NULL,
+            storage TEXT,
+            color TEXT,
+            imei1 TEXT NOT NULL,
+            imei2 TEXT,
+            battery_health INTEGER DEFAULT 100,
+            physical_grade TEXT NOT NULL DEFAULT 'Grade A',
+            screen_condition TEXT,
+            back_glass_condition TEXT,
+            base_guide_price_minor INTEGER NOT NULL DEFAULT 0,
+            suggested_value_minor INTEGER NOT NULL DEFAULT 0,
+            deductions_json TEXT,
+            final_approved_value_minor INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'RECEIVED',
+            acquisition_cost_minor INTEGER NOT NULL DEFAULT 0,
+            refurbishment_cost_minor INTEGER NOT NULL DEFAULT 0,
+            true_cost_minor INTEGER NOT NULL DEFAULT 0,
+            staff_notes TEXT,
+            created_at TEXT NOT NULL
+          );
+
+          -- Operating Expenses & Petty Cash
+          CREATE TABLE IF NOT EXISTS expenses (
+            id TEXT PRIMARY KEY,
+            date TEXT NOT NULL,
+            category TEXT NOT NULL,
+            amount_minor INTEGER NOT NULL,
+            payment_method TEXT NOT NULL DEFAULT 'Cash',
+            description TEXT NOT NULL,
+            receipt_ref TEXT,
+            recorded_by TEXT NOT NULL,
+            created_at TEXT NOT NULL
+          );
+
+          -- Indexes
+          CREATE INDEX IF NOT EXISTS idx_repairs_ticket ON repair_tickets(ticket_number);
+          CREATE INDEX IF NOT EXISTS idx_repairs_cust ON repair_tickets(customer_phone);
+          CREATE INDEX IF NOT EXISTS idx_tradeins_num ON trade_ins(trade_in_number);
+          CREATE INDEX IF NOT EXISTS idx_tradeins_imei ON trade_ins(imei1);
+          CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date);
+        `);
+
+        // Seed default system roles if none exist
+        const now = new Date().toISOString();
+        const existingRoles = d.prepare('SELECT COUNT(*) as count FROM roles').get() as { count: number };
+        if (!existingRoles || existingRoles.count === 0) {
+          d.prepare(`
+            INSERT INTO roles (id, name, description, permissions_json, is_system, created_at)
+            VALUES 
+              ('role_owner', 'Owner', 'Full business & administrative ownership', '["*"]', 1, ?),
+              ('role_manager', 'Manager', 'Operational management, discounts, refunds & reports', '["pos.billing","pos.discount","pos.refund","catalog.manage","inventory.manage","customers.manage","reports.view","shifts.manage","staff.manage","procurement.manage","expenses.manage","repairs.manage","tradein.manage"]', 1, ?),
+              ('role_cashier', 'Cashier', 'Front-desk point of sale, customer billing & shifts', '["pos.billing","customers.manage","shifts.drawer"]', 1, ?),
+              ('role_technician', 'Technician', 'Hardware repairs, diagnostics & IMEI inspections', '["repairs.manage","tradein.manage","inventory.view"]', 1, ?),
+              ('role_inventory', 'Inventory Clerk', 'Warehouse intake, stock count & adjustments', '["inventory.manage","catalog.manage","procurement.manage"]', 1, ?)
+          `).run(now, now, now, now, now);
+        }
+      },
+    },
   ];
 
   for (const mig of migrations) {

@@ -281,3 +281,96 @@ export interface LicensePackage {
   enabledModules: string[];
   signature: string; // Ed25519 signature of payload
 }
+
+export interface Role {
+  id: string;
+  name: string;
+  description: string;
+  permissions: string[];
+  isSystem: boolean;
+  createdAt: string;
+}
+
+export interface RepairTicket {
+  id: string;
+  ticketNumber: string;
+  customerName: string;
+  customerPhone: string;
+  customerEmail?: string;
+  deviceModel: string;
+  imeiOrSerial?: string;
+  passcode?: string;
+  faultDescription: string;
+  physicalCondition?: string;
+  status: 'Received' | 'Diagnostics' | 'Waiting for Parts' | 'Repairing' | 'Ready for Pickup' | 'Delivered';
+  estimatedCostMinor: number;
+  advancePaidMinor: number;
+  technicianNotes?: string;
+  partsUsed?: string[];
+  assignedTechnician?: string;
+  createdAt: string;
+  completedAt?: string;
+}
+
+export interface TradeInRecord {
+  id: string;
+  tradeInNumber: string;
+  customerName: string;
+  customerPhone: string;
+  brand: string;
+  model: string;
+  storage?: string;
+  color?: string;
+  imei1: string;
+  imei2?: string;
+  batteryHealth: number;
+  physicalGrade: 'Grade A' | 'Grade B' | 'Grade C' | 'Grade D';
+  screenCondition?: string;
+  backGlassCondition?: string;
+  baseGuidePriceMinor: number;
+  suggestedValueMinor: number;
+  deductions: { key: string; label: string; amountMinor: number; reason: string }[];
+  finalApprovedValueMinor: number;
+  status: 'RECEIVED' | 'INSPECTION' | 'REPAIR_PREPARATION' | 'READY_FOR_SALE' | 'SOLD' | 'CANCELLED';
+  acquisitionCostMinor: number;
+  refurbishmentCostMinor: number;
+  trueCostMinor: number;
+  staffNotes?: string;
+  createdAt: string;
+}
+
+export interface Expense {
+  id: string;
+  date: string;
+  category: string;
+  amountMinor: number;
+  paymentMethod: string;
+  description: string;
+  receiptRef?: string;
+  recordedBy: string;
+  createdAt: string;
+}
+
+export interface Supplier {
+  id: string;
+  name: string;
+  contactPerson?: string;
+  phone: string;
+  email?: string;
+  address?: string;
+  taxId?: string;
+  isActive: boolean;
+}
+
+export interface PurchaseOrder {
+  id: string;
+  poNumber: string;
+  supplierId: string;
+  supplierName: string;
+  orderDate: string;
+  status: 'DRAFT' | 'ORDERED' | 'RECEIVED' | 'CANCELLED';
+  totalCostMinor: number;
+  itemsCount?: number;
+  notes?: string;
+  createdAt: string;
+}

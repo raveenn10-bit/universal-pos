@@ -6,8 +6,17 @@ const api = {
     checkHasUsers: () => ipcRenderer.invoke('auth:checkHasUsers'),
     setupInitialOwner: (payload: any) => ipcRenderer.invoke('auth:setupInitialOwner', payload),
     login: (payload: { username: string; password: string }) => ipcRenderer.invoke('auth:login', payload),
+    loginPin: (pin: string) => ipcRenderer.invoke('auth:loginPin', pin),
     logout: (token: string) => ipcRenderer.invoke('auth:logout', token),
     reauthenticate: (payload: { userId: string; password: string }) => ipcRenderer.invoke('auth:reauthenticate', payload),
+    getUsers: () => ipcRenderer.invoke('auth:getUsers'),
+    createUser: (payload: any, token: string) => ipcRenderer.invoke('auth:createUser', { payload, token }),
+    updateUser: (userId: string, payload: any, token: string) => ipcRenderer.invoke('auth:updateUser', { userId, payload, token }),
+    deleteUser: (userId: string, token: string) => ipcRenderer.invoke('auth:deleteUser', { userId, token }),
+    getRoles: () => ipcRenderer.invoke('auth:getRoles'),
+    createRole: (name: string, description: string, permissions: string[], token: string) => ipcRenderer.invoke('auth:createRole', { name, description, permissions, token }),
+    updateRole: (id: string, name: string, description: string, permissions: string[], token: string) => ipcRenderer.invoke('auth:updateRole', { id, name, description, permissions, token }),
+    deleteRole: (id: string, token: string) => ipcRenderer.invoke('auth:deleteRole', { id, token }),
   },
   catalog: {
     searchProducts: (query?: string, categoryId?: string) => ipcRenderer.invoke('catalog:searchProducts', { query, categoryId }),
@@ -50,6 +59,31 @@ const api = {
     getDashboardMetrics: () => ipcRenderer.invoke('reports:getDashboardMetrics'),
     getProfitAndLoss: (fromDate?: string, toDate?: string) => ipcRenderer.invoke('reports:getProfitAndLoss', { fromDate, toDate }),
   },
+  repairs: {
+    list: (filter?: { search?: string; status?: string }) => ipcRenderer.invoke('repairs:list', filter),
+    create: (payload: any, token: string) => ipcRenderer.invoke('repairs:create', { payload, token }),
+    updateStatus: (ticketId: string, status: string, technicianNotes?: string, token?: string) => ipcRenderer.invoke('repairs:updateStatus', { ticketId, status, technicianNotes, token }),
+    update: (ticketId: string, updates: any, token: string) => ipcRenderer.invoke('repairs:update', { ticketId, updates, token }),
+  },
+  tradein: {
+    list: (filter?: { search?: string; status?: string }) => ipcRenderer.invoke('tradein:list', filter),
+    create: (payload: any, token: string) => ipcRenderer.invoke('tradein:create', { payload, token }),
+    updateStatus: (tradeInId: string, status: string, token: string) => ipcRenderer.invoke('tradein:updateStatus', { tradeInId, status, token }),
+    convertToInventory: (tradeInId: string, token: string) => ipcRenderer.invoke('tradein:convertToInventory', { tradeInId, token }),
+  },
+  expenses: {
+    list: (filter?: { search?: string; category?: string }) => ipcRenderer.invoke('expenses:list', filter),
+    record: (payload: any, token: string) => ipcRenderer.invoke('expenses:record', { payload, token }),
+    delete: (expenseId: string, token: string) => ipcRenderer.invoke('expenses:delete', { expenseId, token }),
+  },
+  suppliers: {
+    list: () => ipcRenderer.invoke('suppliers:list'),
+    create: (payload: any, token: string) => ipcRenderer.invoke('suppliers:create', { payload, token }),
+  },
+  purchases: {
+    list: () => ipcRenderer.invoke('purchases:list'),
+    receive: (supplierId: string, items: any[], notes: string, token: string) => ipcRenderer.invoke('purchases:receive', { supplierId, items, notes, token }),
+  },
   pdf: {
     exportReceiptPdf: (saleId: string) => ipcRenderer.invoke('pdf:exportReceiptPdf', saleId),
     exportInvoicePdf: (saleId: string) => ipcRenderer.invoke('pdf:exportInvoicePdf', saleId),
@@ -59,6 +93,7 @@ const api = {
     getActiveLicense: () => ipcRenderer.invoke('license:getActiveLicense'),
     getActiveProfileConfig: () => ipcRenderer.invoke('license:getActiveProfileConfig'),
     importProvisioningPackage: (pkg: any) => ipcRenderer.invoke('license:importProvisioningPackage', pkg),
+    switchProfile: (profileType: string) => ipcRenderer.invoke('license:switchProfile', profileType),
   },
   backup: {
     createBackup: (token: string) => ipcRenderer.invoke('backup:createBackup', token),
@@ -67,6 +102,9 @@ const api = {
   system: {
     getSystemInfo: () => ipcRenderer.invoke('system:getSystemInfo'),
     selectFile: () => ipcRenderer.invoke('system:selectFile'),
+  },
+  window: {
+    setTitle: (title: string) => ipcRenderer.invoke('window:setTitle', title),
   },
 };
 

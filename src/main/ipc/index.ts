@@ -13,6 +13,10 @@ import * as reportService from '../services/reportService';
 import * as pdfService from '../services/pdfService';
 import * as licenseService from '../services/licenseService';
 import * as backupService from '../services/backupService';
+import * as repairService from '../services/repairService';
+import * as tradeInService from '../services/tradeInService';
+import * as expenseService from '../services/expenseService';
+import * as procurementService from '../services/procurementService';
 import { getHardwareFingerprint } from '../crypto/signer';
 
 export function registerIpcHandlers(mainWindow: BrowserWindow): void {
@@ -44,6 +48,48 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
 
   ipcMain.handle('auth:reauthenticate', async (_e, { userId, password }) => {
     return authService.reauthenticate(userId, password);
+  });
+
+  ipcMain.handle('auth:loginPin', async (_e, pin) => {
+    return authService.loginWithPin(pin);
+  });
+
+  ipcMain.handle('auth:getUsers', async () => {
+    return authService.getUsers();
+  });
+
+  ipcMain.handle('auth:createUser', async (_e, { payload, token }) => {
+    const session = requireSession(token);
+    return authService.createUser(payload, session);
+  });
+
+  ipcMain.handle('auth:updateUser', async (_e, { userId, payload, token }) => {
+    const session = requireSession(token);
+    return authService.updateUser(userId, payload, session);
+  });
+
+  ipcMain.handle('auth:deleteUser', async (_e, { userId, token }) => {
+    const session = requireSession(token);
+    return authService.deleteUser(userId, session);
+  });
+
+  ipcMain.handle('auth:getRoles', async () => {
+    return authService.getRoles();
+  });
+
+  ipcMain.handle('auth:createRole', async (_e, { name, description, permissions, token }) => {
+    const session = requireSession(token);
+    return authService.createRole(name, description, permissions, session);
+  });
+
+  ipcMain.handle('auth:updateRole', async (_e, { id, name, description, permissions, token }) => {
+    const session = requireSession(token);
+    return authService.updateRole(id, name, description, permissions, session);
+  });
+
+  ipcMain.handle('auth:deleteRole', async (_e, { id, token }) => {
+    const session = requireSession(token);
+    return authService.deleteRole(id, session);
   });
 
   // Catalog handlers
@@ -243,6 +289,10 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     return licenseService.importProvisioningPackage(pkg);
   });
 
+  ipcMain.handle('license:switchProfile', async (_e, profileType) => {
+    return licenseService.switchProfile(profileType);
+  });
+
   // Backup handlers
   ipcMain.handle('backup:createBackup', async (_e, token) => {
     const session = requireSession(token);
@@ -271,5 +321,87 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
       filters: [{ name: 'Packages & Backups', extensions: ['apexlicense', 'apexpkg', 'json', 'db'] }],
     });
     return res.canceled ? null : res.filePaths[0];
+  });
+
+  // Repairs handlers
+  ipcMain.handle('repairs:list', async (_e, { search, status } = {}) => {
+    return repairService.listRepairTickets(search, status);
+  });
+
+  ipcMain.handle('repairs:create', async (_e, { payload, token }) => {
+    const session = requireSession(token);
+    return repairService.createRepairTicket(payload, session);
+  });
+
+  ipcMain.handle('repairs:updateStatus', async (_e, { ticketId, status, technicianNotes, token }) => {
+    const session = requireSession(token);
+    return repairService.updateRepairStatus(ticketId, status, technicianNotes, session);
+  });
+
+  ipcMain.handle('repairs:update', async (_e, { ticketId, updates, token }) => {
+    const session = requireSession(token);
+    return repairService.updateRepairTicket(ticketId, updates, session);
+  });
+
+  // Trade-In handlers
+  ipcMain.handle('tradein:list', async (_e, { search, status } = {}) => {
+    return tradeInService.listTradeIns(search, status);
+  });
+
+  ipcMain.handle('tradein:create', async (_e, { payload, token }) => {
+    const session = requireSession(token);
+    return tradeInService.createTradeIn(payload, session);
+  });
+
+  ipcMain.handle('tradein:updateStatus', async (_e, { tradeInId, status, token }) => {
+    const session = requireSession(token);
+    return tradeInService.updateTradeInStatus(tradeInId, status, session);
+  });
+
+  ipcMain.handle('tradein:convertToInventory', async (_e, { tradeInId, token }) => {
+    const session = requireSession(token);
+    return tradeInService.convertTradeInToInventory(tradeInId, session);
+  });
+
+  // Expenses handlers
+  ipcMain.handle('expenses:list', async (_e, { search, category } = {}) => {
+    return expenseService.listExpenses(search, category);
+  });
+
+  ipcMain.handle('expenses:record', async (_e, { payload, token }) => {
+    const session = requireSession(token);
+    return expenseService.recordExpense(payload, session);
+  });
+
+  ipcMain.handle('expenses:delete', async (_e, { expenseId, token }) => {
+    const session = requireSession(token);
+    return expenseService.deleteExpense(expenseId, session);
+  });
+
+  // Suppliers & Procurement handlers
+  ipcMain.handle('suppliers:list', async () => {
+    return procurementService.listSuppliers();
+  });
+
+  ipcMain.handle('suppliers:create', async (_e, { payload, token }) => {
+    const session = requireSession(token);
+    return procurementService.createSupplier(payload, session);
+  });
+
+  ipcMain.handle('purchases:list', async () => {
+    return procurementService.listPurchaseOrders();
+  });
+
+  ipcMain.handle('purchases:receive', async (_e, { supplierId, items, notes, token }) => {
+    const session = requireSession(token);
+    return procurementService.receiveGoods(supplierId, items, notes, session);
+  });
+
+  // Window title updater
+  ipcMain.handle('window:setTitle', async (_e, title: string) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setTitle(title);
+    }
+    return true;
   });
 }

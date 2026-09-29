@@ -217,3 +217,190 @@ export function reauthenticate(userId: string, password: string): boolean {
   if (!user) return false;
   return verifyPassword(password, user.password_hash);
 }
+
+export function loginWithPin(pin: string): UserSession {
+  const db = getDb();
+  const users = db.prepare('SELECT id, username, full_name, role, pin_hash, is_active FROM users WHERE is_active = 1').all() as any[];
+
+  for (const u of users) {
+    if (u.pin_hash && verifyPassword(pin, u.pin_hash)) {
+      const permRows = db.prepare('SELECT permission_key FROM user_permissions WHERE user_id = ? AND is_granted = 1').all(u.id) as { permission_key: string }[];
+      const permissions = u.role === 'owner' ? ['*'] : permRows.map(r => r.permission_key);
+
+      const token = generateSessionToken();
+      const session: UserSession = {
+        userId: u.id,
+        username: u.username,
+        fullName: u.full_name,
+        role: u.role,
+        token,
+        permissions,
+      };
+      activeSessions.set(token, session);
+      return session;
+    }
+  }
+
+  throw new Error('Invalid PIN code.');
+}
+
+export function getUsers(): any[] {
+  const db = getDb();
+  const rows = db.prepare('SELECT id, username, full_name, role, is_active, created_at, updated_at FROM users ORDER BY created_at ASC').all() as any[];
+  return rows.map(r => ({
+    id: r.id,
+    username: r.username,
+    fullName: r.full_name,
+    role: r.role,
+    isActive: r.is_active === 1,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  }));
+}
+
+export function createUser(payload: {
+  username: string;
+  fullName: string;
+  role: string;
+  password?: string;
+  pin?: string;
+}, session: UserSession): any {
+  assertPermission(session, 'staff.manage');
+  const db = getDb();
+  const cleanUsername = payload.username.trim().toLowerCase();
+  const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(cleanUsername);
+  if (existing) {
+    throw new Error(`Username '${cleanUsername}' is already taken.`);
+  }
+
+  const id = `usr_${crypto.randomUUID()}`;
+  const now = new Date().toISOString();
+  const passwordHash = hashPassword(payload.password || '12345678');
+  const pinHash = payload.pin ? hashPassword(payload.pin) : null;
+
+  db.prepare(`
+    INSERT INTO users (id, username, full_name, role, password_hash, pin_hash, is_active, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
+  `).run(id, cleanUsername, payload.fullName.trim(), payload.role, passwordHash, pinHash, now, now);
+
+  return {
+    id,
+    username: cleanUsername,
+    fullName: payload.fullName.trim(),
+    role: payload.role,
+    isActive: true,
+    createdAt: now,
+  };
+}
+
+export function updateUser(userId: string, payload: {
+  fullName?: string;
+  role?: string;
+  password?: string;
+  pin?: string;
+  isActive?: boolean;
+}, session: UserSession): any {
+  assertPermission(session, 'staff.manage');
+  const db = getDb();
+  const user = db.prepare('SELECT id, username, full_name, role, is_active FROM users WHERE id = ?').get(userId) as any;
+  if (!user) throw new Error('User not found.');
+
+  const now = new Date().toISOString();
+  const newFullName = payload.fullName !== undefined ? payload.fullName.trim() : user.full_name;
+  const newRole = payload.role !== undefined ? payload.role : user.role;
+  const newActive = payload.isActive !== undefined ? (payload.isActive ? 1 : 0) : user.is_active;
+
+  if (payload.password) {
+    const newHash = hashPassword(payload.password);
+    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(newHash, userId);
+  }
+
+  if (payload.pin !== undefined) {
+    const newPinHash = payload.pin ? hashPassword(payload.pin) : null;
+    db.prepare('UPDATE users SET pin_hash = ? WHERE id = ?').run(newPinHash, userId);
+  }
+
+  db.prepare(`
+    UPDATE users SET full_name = ?, role = ?, is_active = ?, updated_at = ? WHERE id = ?
+  `).run(newFullName, newRole, newActive, now, userId);
+
+  return {
+    id: userId,
+    username: user.username,
+    fullName: newFullName,
+    role: newRole,
+    isActive: newActive === 1,
+    updatedAt: now,
+  };
+}
+
+export function deleteUser(userId: string, session: UserSession): boolean {
+  assertPermission(session, 'staff.manage');
+  const db = getDb();
+  const user = db.prepare('SELECT id, role FROM users WHERE id = ?').get(userId) as any;
+  if (!user) throw new Error('User not found.');
+  if (user.role === 'owner') throw new Error('Cannot delete owner account.');
+
+  db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+  return true;
+}
+
+export function getRoles(): any[] {
+  const db = getDb();
+  const rows = db.prepare('SELECT * FROM roles ORDER BY is_system DESC, name ASC').all() as any[];
+  return rows.map(r => ({
+    id: r.id,
+    name: r.name,
+    description: r.description,
+    permissions: JSON.parse(r.permissions_json || '[]'),
+    isSystem: r.is_system === 1,
+    createdAt: r.created_at,
+  }));
+}
+
+export function createRole(name: string, description: string, permissions: string[], session: UserSession): any {
+  assertPermission(session, 'staff.manage');
+  const db = getDb();
+  const id = `role_${crypto.randomUUID()}`;
+  const now = new Date().toISOString();
+
+  db.prepare(`
+    INSERT INTO roles (id, name, description, permissions_json, is_system, created_at)
+    VALUES (?, ?, ?, ?, 0, ?)
+  `).run(id, name.trim(), description.trim(), JSON.stringify(permissions), now);
+
+  return {
+    id,
+    name: name.trim(),
+    description: description.trim(),
+    permissions,
+    isSystem: false,
+    createdAt: now,
+  };
+}
+
+export function updateRole(id: string, name: string, description: string, permissions: string[], session: UserSession): any {
+  assertPermission(session, 'staff.manage');
+  const db = getDb();
+  db.prepare(`
+    UPDATE roles SET name = ?, description = ?, permissions_json = ? WHERE id = ?
+  `).run(name.trim(), description.trim(), JSON.stringify(permissions), id);
+
+  return {
+    id,
+    name: name.trim(),
+    description: description.trim(),
+    permissions,
+  };
+}
+
+export function deleteRole(id: string, session: UserSession): boolean {
+  assertPermission(session, 'staff.manage');
+  const db = getDb();
+  const role = db.prepare('SELECT id, is_system FROM roles WHERE id = ?').get(id) as any;
+  if (!role) throw new Error('Role not found.');
+  if (role.is_system === 1) throw new Error('Cannot delete system role.');
+
+  db.prepare('DELETE FROM roles WHERE id = ?').run(id);
+  return true;
+}
