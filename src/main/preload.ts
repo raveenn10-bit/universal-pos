@@ -28,6 +28,8 @@ const api = {
     processSale: (payload: any, token: string) => ipcRenderer.invoke('checkout:processSale', { payload, token }),
     getSaleById: (saleId: string) => ipcRenderer.invoke('checkout:getSaleById', saleId),
     getRecentSales: (limit?: number) => ipcRenderer.invoke('checkout:getRecentSales', limit),
+    reverseSale: (saleId: string, reason: string, token: string) => ipcRenderer.invoke('checkout:reverseSale', { saleId, reason, token }),
+    editSale: (payload: any, token: string) => ipcRenderer.invoke('checkout:editSale', { payload, token }),
   },
   inventory: {
     getStockLevel: (productId: string, variantId?: string) => ipcRenderer.invoke('inventory:getStockLevel', { productId, variantId }),

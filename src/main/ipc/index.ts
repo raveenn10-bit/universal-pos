@@ -145,6 +145,16 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
     return checkoutService.getRecentSales(limit);
   });
 
+  ipcMain.handle('checkout:reverseSale', async (_e, { saleId, reason, token }) => {
+    const session = requireSession(token);
+    return checkoutService.reverseSale(saleId, reason, session);
+  });
+
+  ipcMain.handle('checkout:editSale', async (_e, { payload, token }) => {
+    const session = requireSession(token);
+    return checkoutService.editSale(payload, session);
+  });
+
   // Inventory handlers
   ipcMain.handle('inventory:getStockLevel', async (_e, { productId, variantId }) => {
     return inventoryService.getStockLevel(productId, variantId);

@@ -29,7 +29,7 @@ export function getDashboardMetrics(): DashboardMetrics {
   const salesRow = db.prepare(`
     SELECT COUNT(*) as count, COALESCE(SUM(total_minor), 0) as total_sales
     FROM sales 
-    WHERE sale_status = 'COMPLETED'
+    WHERE sale_status IN ('COMPLETED', 'CORRECTED')
   `).get() as { count: number; total_sales: number };
 
   // 2. Sales Trend (by month)
@@ -40,7 +40,7 @@ export function getDashboardMetrics(): DashboardMetrics {
   const salesTrendRows = db.prepare(`
     SELECT strftime('%m', sale_date) as month_num, SUM(total_minor) as month_sales
     FROM sales 
-    WHERE sale_status = 'COMPLETED' AND strftime('%Y', sale_date) = ?
+    WHERE sale_status IN ('COMPLETED', 'CORRECTED') AND strftime('%Y', sale_date) = ?
     GROUP BY month_num
   `).all(currentYear.toString()) as { month_num: string; month_sales: number }[];
 
@@ -86,9 +86,11 @@ export function getDashboardMetrics(): DashboardMetrics {
 
   // 4. Top Sold Items
   const topItemsRows = db.prepare(`
-    SELECT product_name, SUM(quantity_scale4) as total_qty
-    FROM sale_items
-    GROUP BY product_name
+    SELECT si.product_name, SUM(si.quantity_scale4) as total_qty
+    FROM sale_items si
+    JOIN sales s ON si.sale_id = s.id
+    WHERE s.sale_status IN ('COMPLETED', 'CORRECTED')
+    GROUP BY si.product_name
     ORDER BY total_qty DESC
     LIMIT 5
   `).all() as { product_name: string; total_qty: number }[];
@@ -120,7 +122,7 @@ export function getDashboardMetrics(): DashboardMetrics {
     customerName: r.customer_name || 'Walk-in Customer',
     totalMinor: r.total_minor,
     saleDate: r.sale_date,
-    status: r.sale_status === 'COMPLETED' ? 'Completed' : 'Pending',
+    status: r.sale_status === 'COMPLETED' ? 'Completed' : (r.sale_status === 'CORRECTED' ? 'Corrected' : (r.sale_status === 'VOIDED' ? 'Voided' : 'Pending')),
   }));
 
   return {
@@ -152,7 +154,7 @@ export function getProfitAndLoss(fromDate?: string, toDate?: string): {
       COALESCE(SUM(s.tax_minor), 0) as tax,
       COALESCE(SUM(s.total_minor), 0) as net_sales
     FROM sales s
-    WHERE s.sale_status = 'COMPLETED'
+    WHERE s.sale_status IN ('COMPLETED', 'CORRECTED')
   `;
   const params: any[] = [];
   if (fromDate) {
@@ -171,7 +173,7 @@ export function getProfitAndLoss(fromDate?: string, toDate?: string): {
     SELECT COALESCE(SUM(ROUND(si.unit_cost_minor * (si.quantity_scale4 / 10000.0))), 0) as total_cogs
     FROM sale_items si
     JOIN sales s ON si.sale_id = s.id
-    WHERE s.sale_status = 'COMPLETED'
+    WHERE s.sale_status IN ('COMPLETED', 'CORRECTED')
   `;
   const cogsRow = db.prepare(cogsSql).get(...params) as any;
 

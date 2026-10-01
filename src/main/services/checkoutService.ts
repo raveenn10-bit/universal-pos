@@ -407,3 +407,460 @@ export function getRecentSales(limit: number = 10): Sale[] {
   const rows = db.prepare('SELECT id FROM sales ORDER BY sale_date DESC LIMIT ?').all(limit) as { id: string }[];
   return rows.map(r => getSaleById(r.id)!);
 }
+
+export interface ReverseSaleRequest {
+  saleId: string;
+  reason: string;
+}
+
+export interface EditSaleItemPayload {
+  productId: string;
+  variantId?: string;
+  productName: string;
+  sku: string;
+  barcode: string;
+  quantityScale4: number;
+  unitPriceMinor: number;
+  unitCostMinor: number;
+  discountMinor?: number;
+  taxRateBps?: number;
+  serialNumber?: string;
+  imei1?: string;
+  imei2?: string;
+}
+
+export interface EditSaleRequest {
+  saleId: string;
+  customerName?: string;
+  customerId?: string;
+  notes?: string;
+  discountMinor?: number;
+  discountType?: 'PERCENT' | 'FIXED';
+  items?: EditSaleItemPayload[];
+  reason?: string;
+}
+
+/**
+ * Reverses (voids / cancels) a previously completed or corrected sale.
+ * - Restores product inventory stock and serial numbers.
+ * - Reverses customer credit ledger transactions if applicable.
+ * - Reverses active shift sales totals if the shift is still open.
+ * - Updates invoice status to 'VOIDED' with audit logging.
+ */
+export function reverseSale(
+  saleId: string,
+  reason: string,
+  session: UserSession
+): Sale {
+  if (session.role !== 'owner' && !session.permissions.includes('*') && !session.permissions.includes('pos.refund') && !session.permissions.includes('pos.void')) {
+    throw new Error('Forbidden: Only the Owner or authorized managers can reverse or void invoices.');
+  }
+  const db = getDb();
+  const sale = getSaleById(saleId);
+  if (!sale) {
+    throw new Error(`Sale with ID '${saleId}' not found.`);
+  }
+
+  if (sale.saleStatus === 'VOIDED') {
+    throw new Error('This invoice has already been reversed / voided.');
+  }
+
+  const now = new Date().toISOString();
+
+  db.transaction(() => {
+    // 1. Mark sale as VOIDED and record reason in notes
+    const reversalNote = `[REVERSED on ${new Date().toLocaleDateString('en-LK')} by ${session.fullName || session.username}: ${reason.trim() || 'Voided by Owner'}]`;
+    const updatedNotes = sale.notes ? `${sale.notes}\n${reversalNote}` : reversalNote;
+
+    db.prepare(`
+      UPDATE sales 
+      SET sale_status = 'VOIDED', notes = ?
+      WHERE id = ?
+    `).run(updatedNotes, saleId);
+
+    // 2. Restore stock and release serial numbers for each item sold
+    for (const item of sale.items) {
+      const currentStock = getStockLevel(item.productId, item.variantId || '');
+      db.prepare(`
+        UPDATE stock_levels 
+        SET quantity_scale4 = ? 
+        WHERE product_id = ? AND variant_id = ?
+      `).run(currentStock + item.quantityScale4, item.productId, item.variantId || '');
+
+      // Record inventory movement
+      db.prepare(`
+        INSERT INTO stock_movements (
+          id, timestamp, product_id, variant_id, movement_type,
+          quantity_scale4, unit_cost_minor, reference_id, reference_type, notes, user_id
+        ) VALUES (?, ?, ?, ?, 'SALE_REVERSAL_RESTOCK', ?, ?, ?, 'SALE', ?, ?)
+      `).run(
+        `mov_${crypto.randomUUID()}`,
+        now,
+        item.productId,
+        item.variantId || '',
+        item.quantityScale4,
+        item.unitCostMinor,
+        sale.id,
+        `Reversal of Invoice ${sale.invoiceNumber}: ${reason.trim() || 'Voided'}`,
+        session.userId
+      );
+
+      // Restore serialized unit
+      if (item.serialNumber) {
+        db.prepare(`
+          UPDATE inventory_items 
+          SET status = 'AVAILABLE', sold_at_sale_id = NULL 
+          WHERE product_id = ? AND serial_number = ?
+        `).run(item.productId, item.serialNumber);
+      }
+      if (item.imei1) {
+        db.prepare(`
+          UPDATE inventory_items 
+          SET status = 'AVAILABLE', sold_at_sale_id = NULL 
+          WHERE product_id = ? AND (imei_1 = ? OR imei_2 = ?)
+        `).run(item.productId, item.imei1, item.imei1);
+      }
+    }
+
+    // 3. Customer Ledger Reversal: If store credit was charged, refund/credit customer
+    const creditPayment = sale.payments?.find(p => p.method === 'CREDIT');
+    if (creditPayment && creditPayment.amountMinor > 0 && sale.customerId) {
+      const curBal = getCustomerBalance(sale.customerId);
+      db.prepare(`
+        INSERT INTO customer_transactions (
+          id, timestamp, customer_id, transaction_type, reference_id, reference_number,
+          debit_minor, credit_minor, running_balance_minor, notes, user_id
+        ) VALUES (?, ?, ?, 'RETURN_CREDIT', ?, ?, 0, ?, ?, ?, ?)
+      `).run(
+        `ctx_${crypto.randomUUID()}`,
+        now,
+        sale.customerId,
+        sale.id,
+        sale.invoiceNumber,
+        creditPayment.amountMinor,
+        curBal - creditPayment.amountMinor,
+        `Reversal refund for Invoice ${sale.invoiceNumber}: ${reason.trim() || 'Voided'}`,
+        session.userId
+      );
+    }
+
+    // 4. Active Shift Reversal: If the shift is still OPEN, deduct from totals
+    if (sale.shiftId) {
+      const shift = db.prepare('SELECT status FROM shifts WHERE id = ?').get(sale.shiftId) as { status: string } | undefined;
+      if (shift && shift.status === 'OPEN') {
+        let cashDelta = 0;
+        let cardDelta = 0;
+        let transferDelta = 0;
+        let creditDelta = 0;
+
+        for (const p of sale.payments) {
+          if (p.method === 'CASH') cashDelta += (p.amountMinor - sale.changeMinor);
+          else if (p.method === 'CARD') cardDelta += p.amountMinor;
+          else if (p.method === 'BANK_TRANSFER') transferDelta += p.amountMinor;
+          else if (p.method === 'CREDIT') creditDelta += p.amountMinor;
+        }
+
+        db.prepare(`
+          UPDATE shifts SET
+            total_sales_cash_minor = MAX(0, total_sales_cash_minor - ?),
+            total_sales_card_minor = MAX(0, total_sales_card_minor - ?),
+            total_sales_transfer_minor = MAX(0, total_sales_transfer_minor - ?),
+            total_sales_credit_minor = MAX(0, total_sales_credit_minor - ?)
+          WHERE id = ?
+        `).run(cashDelta, cardDelta, transferDelta, creditDelta, sale.shiftId);
+      }
+    }
+
+    // 5. Audit Log
+    db.prepare(`
+      INSERT INTO audit_logs (id, timestamp, user_id, action, entity_type, entity_id, details_json)
+      VALUES (?, ?, ?, 'INVOICE_REVERSED', 'SALE', ?, ?)
+    `).run(
+      `aud_${crypto.randomUUID()}`,
+      now,
+      session.userId,
+      sale.id,
+      JSON.stringify({
+        invoiceNumber: sale.invoiceNumber,
+        reason: reason.trim(),
+        totalMinor: sale.totalMinor,
+        reversedBy: session.fullName || session.username,
+      })
+    );
+  })();
+
+  return getSaleById(saleId)!;
+}
+
+/**
+ * Edits an existing POS invoice.
+ * Allows owner/authorized staff to modify customer details, item quantities, prices, discounts, and notes.
+ * Accurately reconciles inventory stock differences and updates financial totals.
+ */
+export function editSale(
+  req: EditSaleRequest,
+  session: UserSession
+): Sale {
+  if (session.role !== 'owner' && !session.permissions.includes('*') && !session.permissions.includes('pos.refund') && !session.permissions.includes('pos.edit_sale')) {
+    throw new Error('Forbidden: Only the Owner or authorized managers can edit invoices.');
+  }
+  const db = getDb();
+  const origSale = getSaleById(req.saleId);
+  if (!origSale) {
+    throw new Error(`Sale with ID '${req.saleId}' not found.`);
+  }
+
+  if (origSale.saleStatus === 'VOIDED') {
+    throw new Error('Cannot edit an invoice that has been voided / reversed.');
+  }
+
+  const now = new Date().toISOString();
+
+  db.transaction(() => {
+    let subtotalMinor = origSale.subtotalMinor;
+    let totalTaxMinor = origSale.taxMinor;
+    let cartDiscountMinor = req.discountMinor !== undefined ? req.discountMinor : origSale.discountMinor;
+    const discountType = req.discountType || origSale.discountType;
+    let totalMinor = origSale.totalMinor;
+
+    // 1. If items are modified, reconcile stock and recalculate financials
+    if (req.items && req.items.length > 0) {
+      // Step A: Restore original stock and release serials
+      for (const origItem of origSale.items) {
+        const curStock = getStockLevel(origItem.productId, origItem.variantId || '');
+        db.prepare(`
+          UPDATE stock_levels 
+          SET quantity_scale4 = ? 
+          WHERE product_id = ? AND variant_id = ?
+        `).run(curStock + origItem.quantityScale4, origItem.productId, origItem.variantId || '');
+
+        if (origItem.serialNumber) {
+          db.prepare(`
+            UPDATE inventory_items 
+            SET status = 'AVAILABLE', sold_at_sale_id = NULL 
+            WHERE product_id = ? AND serial_number = ?
+          `).run(origItem.productId, origItem.serialNumber);
+        }
+        if (origItem.imei1) {
+          db.prepare(`
+            UPDATE inventory_items 
+            SET status = 'AVAILABLE', sold_at_sale_id = NULL 
+            WHERE product_id = ? AND (imei_1 = ? OR imei_2 = ?)
+          `).run(origItem.productId, origItem.imei1, origItem.imei1);
+        }
+      }
+
+      // Step B: Delete old sale items
+      db.prepare('DELETE FROM sale_items WHERE sale_id = ?').run(origSale.id);
+
+      // Step C: Verify stock, insert new items, and deduct stock
+      subtotalMinor = 0;
+      totalTaxMinor = 0;
+
+      for (const item of req.items) {
+        const curStock = getStockLevel(item.productId, item.variantId || '');
+        if (curStock < item.quantityScale4) {
+          throw new Error(`Insufficient stock for '${item.productName}'. Available: ${curStock / 10000}, Required: ${item.quantityScale4 / 10000}`);
+        }
+
+        const rawQty = item.quantityScale4 / 10000;
+        const baseAmount = Math.round(item.unitPriceMinor * rawQty);
+        const lineDiscount = item.discountMinor || 0;
+        const taxableAmount = Math.max(0, baseAmount - lineDiscount);
+        let taxMinor = 0;
+        if (item.taxRateBps && item.taxRateBps > 0) {
+          taxMinor = Math.round((taxableAmount * item.taxRateBps) / 10000);
+        }
+        const lineTotalMinor = taxableAmount + taxMinor;
+
+        subtotalMinor += baseAmount;
+        totalTaxMinor += taxMinor;
+
+        const lineItemId = `sli_${crypto.randomUUID()}`;
+        db.prepare(`
+          INSERT INTO sale_items (
+            id, sale_id, product_id, variant_id, product_name, sku, barcode,
+            quantity_scale4, unit_price_minor, unit_cost_minor, discount_minor,
+            tax_rate_bps, tax_minor, line_total_minor, serial_numbers_json
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          lineItemId,
+          origSale.id,
+          item.productId,
+          item.variantId || null,
+          item.productName,
+          item.sku,
+          item.barcode,
+          item.quantityScale4,
+          item.unitPriceMinor,
+          item.unitCostMinor,
+          item.discountMinor || 0,
+          item.taxRateBps || 0,
+          taxMinor,
+          lineTotalMinor,
+          item.serialNumber || item.imei1 ? JSON.stringify({ serial: item.serialNumber, imei1: item.imei1, imei2: item.imei2 }) : null
+        );
+
+        // Deduct new stock
+        db.prepare(`
+          UPDATE stock_levels 
+          SET quantity_scale4 = ? 
+          WHERE product_id = ? AND variant_id = ?
+        `).run(curStock - item.quantityScale4, item.productId, item.variantId || '');
+
+        // Record stock movement
+        db.prepare(`
+          INSERT INTO stock_movements (
+            id, timestamp, product_id, variant_id, movement_type,
+            quantity_scale4, unit_cost_minor, reference_id, reference_type, notes, user_id
+          ) VALUES (?, ?, ?, ?, 'SALE_EDIT_ADJUST', ?, ?, ?, 'SALE', ?, ?)
+        `).run(
+          `mov_${crypto.randomUUID()}`,
+          now,
+          item.productId,
+          item.variantId || '',
+          item.quantityScale4,
+          item.unitCostMinor,
+          origSale.id,
+          `Correction of Invoice ${origSale.invoiceNumber}`,
+          session.userId
+        );
+
+        // Mark serialized item as SOLD
+        if (item.serialNumber) {
+          db.prepare(`
+            UPDATE inventory_items 
+            SET status = 'SOLD', sold_at_sale_id = ? 
+            WHERE product_id = ? AND serial_number = ?
+          `).run(origSale.id, item.productId, item.serialNumber);
+        }
+        if (item.imei1) {
+          db.prepare(`
+            UPDATE inventory_items 
+            SET status = 'SOLD', sold_at_sale_id = ? 
+            WHERE product_id = ? AND (imei_1 = ? OR imei_2 = ?)
+          `).run(origSale.id, item.productId, item.imei1, item.imei1);
+        }
+      }
+
+      // Calculate global cart discount
+      if (discountType === 'PERCENT' && cartDiscountMinor) {
+        cartDiscountMinor = Math.round((subtotalMinor * cartDiscountMinor) / 10000);
+      }
+      totalMinor = Math.max(0, subtotalMinor - cartDiscountMinor + totalTaxMinor);
+    }
+
+    // 2. Customer resolution
+    let customerId = req.customerId !== undefined ? req.customerId : origSale.customerId;
+    let customerName = req.customerName !== undefined ? req.customerName : origSale.customerName;
+    let customerSnapshotJson = origSale.customerSnapshot ? JSON.stringify(origSale.customerSnapshot) : null;
+
+    if (customerId && customerId !== origSale.customerId) {
+      const cust = getCustomerById(customerId);
+      if (cust) {
+        customerName = cust.name;
+        customerSnapshotJson = JSON.stringify({
+          id: cust.id,
+          customerCode: cust.customerCode,
+          name: cust.name,
+          phone: cust.phone,
+          addressBilling: cust.addressBilling,
+          taxId: cust.taxId,
+          companyName: cust.companyName,
+        });
+      }
+    }
+
+    // 3. Balance due and change calculation
+    let balanceDueMinor = 0;
+    let changeMinor = 0;
+    if (origSale.paidMinor > totalMinor) {
+      changeMinor = origSale.paidMinor - totalMinor;
+    } else if (origSale.paidMinor < totalMinor) {
+      balanceDueMinor = totalMinor - origSale.paidMinor;
+    }
+    const paymentStatus = balanceDueMinor === 0 ? 'PAID' : (origSale.paidMinor > 0 ? 'PARTIAL' : 'UNPAID');
+
+    // 4. Update customer credit ledger if difference exists
+    const creditPayment = origSale.payments?.find(p => p.method === 'CREDIT');
+    if (creditPayment && customerId && totalMinor !== origSale.totalMinor) {
+      const diff = totalMinor - origSale.totalMinor;
+      const curBal = getCustomerBalance(customerId);
+      db.prepare(`
+        INSERT INTO customer_transactions (
+          id, timestamp, customer_id, transaction_type, reference_id, reference_number,
+          debit_minor, credit_minor, running_balance_minor, notes, user_id
+        ) VALUES (?, ?, ?, 'INVOICE_CHARGE', ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        `ctx_${crypto.randomUUID()}`,
+        now,
+        customerId,
+        origSale.id,
+        origSale.invoiceNumber,
+        diff > 0 ? diff : 0,
+        diff < 0 ? Math.abs(diff) : 0,
+        curBal + diff,
+        `Invoice ${origSale.invoiceNumber} adjusted by ${session.fullName || session.username}`,
+        session.userId
+      );
+    }
+
+    // 5. Update master sales table record
+    const editNote = `[EDITED on ${new Date().toLocaleDateString('en-LK')} by ${session.fullName || session.username}: ${req.reason?.trim() || 'Invoice corrected'}]`;
+    const finalNotes = req.notes !== undefined 
+      ? (req.notes ? `${req.notes}\n${editNote}` : editNote)
+      : (origSale.notes ? `${origSale.notes}\n${editNote}` : editNote);
+
+    db.prepare(`
+      UPDATE sales SET
+        customer_id = ?,
+        customer_name = ?,
+        customer_snapshot_json = ?,
+        subtotal_minor = ?,
+        discount_minor = ?,
+        discount_type = ?,
+        tax_minor = ?,
+        total_minor = ?,
+        change_minor = ?,
+        balance_due_minor = ?,
+        payment_status = ?,
+        sale_status = 'CORRECTED',
+        notes = ?
+      WHERE id = ?
+    `).run(
+      customerId || null,
+      customerName || 'Walk-in Customer',
+      customerSnapshotJson,
+      subtotalMinor,
+      cartDiscountMinor,
+      discountType,
+      totalTaxMinor,
+      totalMinor,
+      changeMinor,
+      balanceDueMinor,
+      paymentStatus,
+      finalNotes,
+      origSale.id
+    );
+
+    // 6. Record Audit Log
+    db.prepare(`
+      INSERT INTO audit_logs (id, timestamp, user_id, action, entity_type, entity_id, details_json)
+      VALUES (?, ?, ?, 'INVOICE_EDITED', 'SALE', ?, ?)
+    `).run(
+      `aud_${crypto.randomUUID()}`,
+      now,
+      session.userId,
+      origSale.id,
+      JSON.stringify({
+        invoiceNumber: origSale.invoiceNumber,
+        previousTotal: origSale.totalMinor,
+        newTotal: totalMinor,
+        editedBy: session.fullName || session.username,
+        reason: req.reason,
+      })
+    );
+  })();
+
+  return getSaleById(origSale.id)!;
+}

@@ -367,7 +367,7 @@ export const App: React.FC = () => {
         ) : currentTab === 'products' ? (
           <ProductsView token={user.token} />
         ) : currentTab === 'orders' ? (
-          <OrdersView token={user.token} />
+          <OrdersView token={user.token} user={user} />
         ) : currentTab === 'shifts' ? (
           <ShiftsView token={user.token} user={user} />
         ) : currentTab === 'purchases' ? (
