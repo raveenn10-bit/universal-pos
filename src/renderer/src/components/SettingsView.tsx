@@ -267,6 +267,74 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ token, onProfileChan
             </span>
           </div>
         </div>
+
+        {/* Interactive Business Profile Switcher for Testing */}
+        <div className="pt-2 border-t border-slate-100 dark:border-slate-700/80">
+          <div className="flex items-center justify-between mb-2.5">
+            <label className="text-xs font-black text-slate-800 dark:text-white flex items-center gap-1.5">
+              <span>Switch Industry Profile (Test different business workflows):</span>
+            </label>
+            <span className="text-[10px] font-bold text-slate-400">
+              Click any profile to test specific UI fields, tabs, and modules
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            {Object.keys(BUSINESS_PROFILES_DISPLAY).map((profKey) => {
+              const info = BUSINESS_PROFILES_DISPLAY[profKey];
+              const isSelected = profileConfig?.profileType === profKey;
+              return (
+                <button
+                  key={profKey}
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const api = (window as any).apexApi;
+                      if (api?.license?.switchProfile) {
+                        const updated = await api.license.switchProfile(profKey);
+                        setProfileConfig(updated);
+                        if (onProfileChange) {
+                          onProfileChange(updated);
+                        }
+                        showNotification(`Switched to: ${info.name}`);
+                      }
+                    } catch (err: any) {
+                      alert(`Failed to switch profile: ${err.message}`);
+                    }
+                  }}
+                  className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                    isSelected
+                      ? 'border-[#1a4cd2] bg-blue-50/80 dark:bg-blue-950/40 shadow-sm ring-2 ring-[#1a4cd2]'
+                      : 'border-slate-200/80 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/40 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xl">{info.icon}</span>
+                      <span className="text-xs font-bold text-slate-800 dark:text-white line-clamp-1">
+                        {info.name}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed">
+                      {info.desc}
+                    </p>
+                  </div>
+                  <div className="mt-2.5 pt-1.5 border-t border-slate-200/50 dark:border-slate-700/50 flex items-center justify-between">
+                    {isSelected ? (
+                      <span className="text-[10px] font-black text-[#1a4cd2] dark:text-blue-400 flex items-center gap-1">
+                        <CheckCircle2 size={12} /> ACTIVE
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                        Click to Activate &rarr;
+                      </span>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {/* STORE BRANDING & DETAILS (SHOP OWNER EDITABLE) */}
