@@ -12,15 +12,16 @@ app.disableHardwareAcceleration();
 
 let mainWindow: BrowserWindow | null = null;
 
-// Enforce single instance lock
-const gotTheLock = app.requestSingleInstanceLock();
-if (!gotTheLock) {
+// Enforce single instance lock only in packaged production mode
+const gotTheLock = app.isPackaged ? app.requestSingleInstanceLock() : true;
+if (app.isPackaged && !gotTheLock) {
   console.warn('[Harsh Apex POS] Another instance is already running. Quitting.');
   app.quit();
 } else {
   app.on('second-instance', () => {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
       mainWindow.focus();
     }
   });
@@ -53,7 +54,7 @@ if (!gotTheLock) {
       minWidth: 1200,
       minHeight: 768,
       backgroundColor: '#f8fafc',
-      show: false,
+      show: true,
       title: 'Harsh Apex Universal POS',
       webPreferences: {
         preload: path.join(__dirname, 'preload.js'),
@@ -65,14 +66,16 @@ if (!gotTheLock) {
 
     mainWindow.once('ready-to-show', () => {
       mainWindow?.show();
+      mainWindow?.focus();
     });
 
-    // Fallback: If ready-to-show hasn't fired in 1.5 seconds, force show
+    // Force show and focus
     setTimeout(() => {
-      if (mainWindow && !mainWindow.isVisible()) {
+      if (mainWindow) {
         mainWindow.show();
+        mainWindow.focus();
       }
-    }, 1500);
+    }, 500);
 
     // Register all secure IPC channels
     registerIpcHandlers(mainWindow);
