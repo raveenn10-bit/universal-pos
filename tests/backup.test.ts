@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { initDatabase, closeDatabase, getDb, getSqlModule } from '../src/main/services/db';
 import { setupInitialOwner } from '../src/main/services/authService';
-import { createBackup, restoreBackup } from '../src/main/services/backupService';
+import { createBackup, restoreBackup, createAutoBackup, getBackupsSummary } from '../src/main/services/backupService';
 import { createProduct } from '../src/main/services/catalogService';
 import { UserSession } from '../src/shared/types';
 
@@ -117,4 +117,24 @@ describe('Backup, Restore & Disaster Recovery Tests', () => {
     expect(origProd).toBeDefined();
     expect(unwantedProd).toBeUndefined();
   });
+
+  it('creates automated background snapshots on shift closures and generates summary', async () => {
+    // 1. Create auto-backup simulating shift close
+    const autoResult = await createAutoBackup('SHIFT_CLOSE', BACKUP_DIR);
+
+    expect(fs.existsSync(autoResult.backupPath)).toBe(true);
+    expect(path.basename(autoResult.backupPath).startsWith('autobackup-SHIFT_CLOSE-')).toBe(true);
+    expect(autoResult.sha256).toBeDefined();
+    expect(autoResult.reason).toBe('SHIFT_CLOSE');
+
+    // 2. Fetch backups summary
+    const summary = getBackupsSummary(BACKUP_DIR);
+    expect(summary.totalCount).toBeGreaterThanOrEqual(1);
+    expect(summary.totalSizeBytes).toBeGreaterThan(0);
+    expect(summary.lastBackupTime).toBeDefined();
+    expect(summary.autoBackupEnabled).toBe(true);
+    expect(summary.recentBackups.length).toBeGreaterThanOrEqual(1);
+    expect(summary.recentBackups[0].isAuto).toBe(true);
+  });
 });
+

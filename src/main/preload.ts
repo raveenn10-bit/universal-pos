@@ -108,6 +108,8 @@ const api = {
   backup: {
     createBackup: (token: string) => ipcRenderer.invoke('backup:createBackup', token),
     restoreBackup: (backupPath: string, token: string) => ipcRenderer.invoke('backup:restoreBackup', { backupPath, token }),
+    getBackupsSummary: () => ipcRenderer.invoke('backup:getBackupsSummary'),
+    openFolder: () => ipcRenderer.invoke('backup:openFolder'),
   },
   system: {
     getSystemInfo: () => ipcRenderer.invoke('system:getSystemInfo'),

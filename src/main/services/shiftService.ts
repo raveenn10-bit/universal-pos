@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import { getDb } from './db';
 import { Shift, UserSession } from '../../shared/types';
 import { assertPermission } from './authService';
+import { createAutoBackup } from './backupService';
 
 export function getActiveShift(cashierId: string): Shift | null {
   const db = getDb();
@@ -123,6 +124,13 @@ export function closeShift(
       JSON.stringify({ countedCashMinor, expectedCash, discrepancy })
     );
   })();
+
+  // Trigger automated backup upon shift closure (End of Day safe snapshot)
+  try {
+    createAutoBackup('SHIFT_CLOSE');
+  } catch (backupErr) {
+    console.warn('[AutoBackup] Shift closure auto-backup warning:', backupErr);
+  }
 
   const updated = db.prepare('SELECT * FROM shifts WHERE id = ?').get(shiftId) as any;
   return formatShift(updated);

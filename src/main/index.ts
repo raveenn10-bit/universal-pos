@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import { initDatabase, closeDatabase, getDb } from './services/db';
 import { registerIpcHandlers } from './ipc';
 import { ensureProductionOwner } from './services/authService';
+import { createAutoBackup } from './services/backupService';
 import { DEFAULT_BUSINESS_PROFILES } from '../shared/constants';
 
 // Disable hardware acceleration to guarantee stability on all Windows machines & Intel/AMD iGPUs
@@ -31,6 +32,7 @@ if (app.isPackaged && !gotTheLock) {
       // 1. Initialize SQLite Database & Migrations
       await initDatabase();
       seedInitialDemoDataIfEmpty();
+      startAutoBackupScheduler();
     } catch (dbErr) {
       console.error('[Harsh Apex POS] Database init failed:', dbErr);
     }
@@ -207,4 +209,32 @@ function seedInitialDemoDataIfEmpty(): void {
   } catch (err) {
     console.error('[Harsh Apex POS] Seed commercial data error:', err);
   }
+}
+
+/**
+ * Starts automatic database backup scheduler:
+ * - Creates a verified startup database snapshot 15s after boot.
+ * - Schedules a periodic snapshot every 4 hours while POS terminal is open.
+ */
+function startAutoBackupScheduler(): void {
+  // 1. Startup snapshot after 15 seconds
+  setTimeout(async () => {
+    try {
+      await createAutoBackup('STARTUP');
+      console.log('[AutoBackup] Startup database snapshot verified and created.');
+    } catch (err) {
+      console.warn('[AutoBackup] Startup auto-backup error:', err);
+    }
+  }, 15000);
+
+  // 2. Periodic snapshot every 4 hours
+  const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
+  setInterval(async () => {
+    try {
+      await createAutoBackup('HOURLY');
+      console.log('[AutoBackup] 4-Hour periodic database snapshot captured.');
+    } catch (err) {
+      console.warn('[AutoBackup] Periodic auto-backup error:', err);
+    }
+  }, FOUR_HOURS_MS);
 }

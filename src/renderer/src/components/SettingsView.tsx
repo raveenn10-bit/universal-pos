@@ -15,7 +15,10 @@ import {
   MapPin,
   Building2,
   Save,
-  AlertCircle
+  AlertCircle,
+  FolderOpen,
+  Clock,
+  HardDrive
 } from 'lucide-react';
 import { BusinessProfileConfig, BusinessProfileType, LicensePackage } from '../../../shared/types';
 
@@ -41,6 +44,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ token, onProfileChan
   const [systemInfo, setSystemInfo] = useState<any>(null);
   const [backupMsg, setBackupMsg] = useState('');
   const [isBackingUp, setIsBackingUp] = useState(false);
+  const [backupsSummary, setBackupsSummary] = useState<any>(null);
+  const [openingFolder, setOpeningFolder] = useState(false);
   const [licenseText, setLicenseText] = useState('');
   const [licenseMsg, setLicenseMsg] = useState('');
   const [toastMsg, setToastMsg] = useState('');
@@ -92,6 +97,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ token, onProfileChan
           setAddress(b.address || '');
           setTaxId(b.taxId || '');
         }
+      }
+      if (api?.backup?.getBackupsSummary) {
+        const bSummary = await api.backup.getBackupsSummary();
+        setBackupsSummary(bSummary);
       }
     } catch (e) {
       console.error(e);
@@ -160,13 +169,32 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ token, onProfileChan
     setIsBackingUp(true);
     setBackupMsg('');
     try {
-      const res = await (window as any).apexApi.backup.createBackup(token);
+      const api = (window as any).apexApi;
+      const res = await api.backup.createBackup(token);
       setBackupMsg(`Backup created successfully: ${res.backupPath} (SHA-256: ${res.sha256.substring(0, 12)}...)`);
-      showNotification('Verified backup created successfully!');
+      showNotification('Verified backup snapshot created successfully!');
+      if (api?.backup?.getBackupsSummary) {
+        const bSummary = await api.backup.getBackupsSummary();
+        setBackupsSummary(bSummary);
+      }
     } catch (err: any) {
       alert(err.message || 'Backup failed');
     } finally {
       setIsBackingUp(false);
+    }
+  };
+
+  const handleOpenBackupsFolder = async () => {
+    setOpeningFolder(true);
+    try {
+      const api = (window as any).apexApi;
+      if (api?.backup?.openFolder) {
+        await api.backup.openFolder();
+      }
+    } catch (err: any) {
+      alert(`Unable to open backups directory: ${err.message || err}`);
+    } finally {
+      setOpeningFolder(false);
     }
   };
 
@@ -268,71 +296,37 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ token, onProfileChan
           </div>
         </div>
 
-        {/* Interactive Business Profile Switcher for Testing */}
-        <div className="pt-2 border-t border-slate-100 dark:border-slate-700/80">
-          <div className="flex items-center justify-between mb-2.5">
-            <label className="text-xs font-black text-slate-800 dark:text-white flex items-center gap-1.5">
-              <span>Switch Industry Profile (Test different business workflows):</span>
-            </label>
-            <span className="text-[10px] font-bold text-slate-400">
-              Click any profile to test specific UI fields, tabs, and modules
-            </span>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            {Object.keys(BUSINESS_PROFILES_DISPLAY).map((profKey) => {
-              const info = BUSINESS_PROFILES_DISPLAY[profKey];
-              const isSelected = profileConfig?.profileType === profKey;
-              return (
-                <button
-                  key={profKey}
-                  type="button"
-                  onClick={async () => {
-                    try {
-                      const api = (window as any).apexApi;
-                      if (api?.license?.switchProfile) {
-                        const updated = await api.license.switchProfile(profKey);
-                        setProfileConfig(updated);
-                        if (onProfileChange) {
-                          onProfileChange(updated);
-                        }
-                        showNotification(`Switched to: ${info.name}`);
-                      }
-                    } catch (err: any) {
-                      alert(`Failed to switch profile: ${err.message}`);
-                    }
-                  }}
-                  className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
-                    isSelected
-                      ? 'border-[#1a4cd2] bg-blue-50/80 dark:bg-blue-950/40 shadow-sm ring-2 ring-[#1a4cd2]'
-                      : 'border-slate-200/80 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/40 hover:bg-slate-100 dark:hover:bg-slate-800'
-                  }`}
-                >
-                  <div>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xl">{info.icon}</span>
-                      <span className="text-xs font-bold text-slate-800 dark:text-white line-clamp-1">
-                        {info.name}
-                      </span>
-                    </div>
-                    <p className="text-[10px] text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed">
-                      {info.desc}
-                    </p>
-                  </div>
-                  <div className="mt-2.5 pt-1.5 border-t border-slate-200/50 dark:border-slate-700/50 flex items-center justify-between">
-                    {isSelected ? (
-                      <span className="text-[10px] font-black text-[#1a4cd2] dark:text-blue-400 flex items-center gap-1">
-                        <CheckCircle2 size={12} /> ACTIVE
-                      </span>
-                    ) : (
-                      <span className="text-[10px] font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-                        Click to Activate &rarr;
-                      </span>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
+        {/* Hardware Binding & Permanent Profile Security Assurance */}
+        <div className="pt-3 border-t border-slate-100 dark:border-slate-700/80">
+          <div className="p-4 rounded-2xl bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200/60 dark:border-slate-700/60 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <span className="p-2 rounded-xl bg-emerald-100/60 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5">
+                <ShieldCheck size={18} />
+              </span>
+              <div>
+                <h4 className="text-xs font-black text-slate-800 dark:text-white flex items-center gap-2">
+                  <span>Single-Business License Enforcement</span>
+                  <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                    ONE-TIME PROVISIONED
+                  </span>
+                </h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                  This POS terminal has been permanently provisioned for <span className="font-bold text-slate-700 dark:text-slate-200">{currentProfInfo.name}</span>. 
+                  To protect operational ledger records, multi-tenant databases, and software integrity, the industry profile is permanently locked and cannot be altered by store cashiers or managers.
+                </p>
+                <div className="flex flex-wrap gap-2 mt-2.5">
+                  <span className="text-[10px] font-semibold px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                    Industry Model: <span className="font-bold text-slate-800 dark:text-white">{profileConfig?.displayName || currentProfInfo.name}</span>
+                  </span>
+                  <span className="text-[10px] font-semibold px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                    Terminal Hardware: <span className="font-bold text-slate-800 dark:text-white">{systemInfo?.hostname || 'POS-TERMINAL-01'}</span>
+                  </span>
+                  <span className="text-[10px] font-semibold px-2.5 py-1 rounded-lg bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                    Database Engine: <span className="font-bold text-slate-800 dark:text-white">Encrypted Local SQLite Wasm</span>
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -512,29 +506,92 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ token, onProfileChan
 
       {/* BACKUP & RESTORE & LICENSE IMPORT */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Database Backup & Disaster Recovery */}
+        {/* Database Automated Backup & Disaster Recovery */}
         <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm space-y-4">
-          <div className="flex items-center gap-2 text-sm font-bold text-slate-800 dark:text-white">
-            <Database size={18} className="text-[#1a4cd2]" />
-            <span>Verified Local Database Backup</span>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-bold text-slate-800 dark:text-white">
+              <Database size={18} className="text-[#1a4cd2] dark:text-blue-400" />
+              <span>Automated Database Backups</span>
+            </div>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+              <ShieldCheck size={11} /> AUTO-PROTECTED
+            </span>
           </div>
 
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            Create an encrypted, timestamped SQLite snapshot of all sales, inventory, customers, and ledger records.
+          <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+            Automatic background snapshots protect all sales, inventory stock, shift cashbooks, and customer ledgers against system crashes or hardware failure.
           </p>
 
-          <button
-            onClick={handleCreateBackup}
-            disabled={isBackingUp}
-            className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black py-3 rounded-2xl shadow-md shadow-emerald-500/20 transition-all cursor-pointer disabled:opacity-50"
-          >
-            <Download size={16} />
-            <span>{isBackingUp ? 'Creating Verified Backup...' : 'Create Backup Snapshot Now'}</span>
-          </button>
+          {/* Backup Live Status Summary Grid */}
+          <div className="grid grid-cols-2 gap-2.5 p-3.5 rounded-2xl bg-slate-50/70 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-700/60">
+            <div>
+              <span className="text-[10px] font-bold text-slate-400 block uppercase">Schedule</span>
+              <span className="text-xs font-black text-slate-800 dark:text-white flex items-center gap-1 mt-0.5">
+                <Clock size={12} className="text-blue-500" /> Every Shift & 4h
+              </span>
+            </div>
+            <div>
+              <span className="text-[10px] font-bold text-slate-400 block uppercase">Saved Snapshots</span>
+              <span className="text-xs font-black text-slate-800 dark:text-white flex items-center gap-1 mt-0.5">
+                <HardDrive size={12} className="text-emerald-500" /> {backupsSummary?.totalCount ?? 0} files ({backupsSummary ? ((backupsSummary.totalSizeBytes || 0) / 1024).toFixed(0) + ' KB' : '0 KB'})
+              </span>
+            </div>
+            <div className="col-span-2 pt-2 border-t border-slate-200/50 dark:border-slate-700/50">
+              <span className="text-[10px] font-bold text-slate-400 block uppercase">Last Verified Backup</span>
+              <span className="text-xs font-mono font-bold text-slate-700 dark:text-slate-300 mt-0.5 truncate block">
+                {backupsSummary?.lastBackupTime 
+                  ? new Date(backupsSummary.lastBackupTime).toLocaleString() 
+                  : 'Awaiting initial auto-backup cycle'}
+              </span>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex flex-col sm:flex-row gap-2.5 pt-1">
+            <button
+              onClick={handleCreateBackup}
+              disabled={isBackingUp}
+              className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black py-2.5 px-3 rounded-xl shadow-md shadow-emerald-500/20 transition-all cursor-pointer disabled:opacity-50"
+            >
+              <Download size={14} />
+              <span>{isBackingUp ? 'Backing Up...' : 'Create Snapshot Now'}</span>
+            </button>
+
+            <button
+              onClick={handleOpenBackupsFolder}
+              disabled={openingFolder}
+              className="flex-1 flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 text-xs font-black py-2.5 px-3 rounded-xl transition-all cursor-pointer disabled:opacity-50"
+            >
+              <FolderOpen size={14} />
+              <span>{openingFolder ? 'Opening...' : 'Open Backups Folder'}</span>
+            </button>
+          </div>
 
           {backupMsg && (
             <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-emerald-700 dark:text-emerald-300 text-[11px] font-mono break-all">
               {backupMsg}
+            </div>
+          )}
+
+          {/* Recent Backups Compact Preview */}
+          {backupsSummary?.recentBackups && backupsSummary.recentBackups.length > 0 && (
+            <div className="space-y-1.5 pt-1">
+              <span className="text-[10px] font-black uppercase text-slate-400 block">Recent Verified Snapshots:</span>
+              <div className="space-y-1 max-h-28 overflow-y-auto pr-1">
+                {backupsSummary.recentBackups.slice(0, 3).map((b: any, idx: number) => (
+                  <div key={idx} className="flex items-center justify-between text-[10px] px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200/50 dark:border-slate-700/50">
+                    <span className="font-mono truncate max-w-[180px] text-slate-600 dark:text-slate-300" title={b.filename}>
+                      {b.filename}
+                    </span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${b.isAuto ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200'}`}>
+                        {b.isAuto ? 'AUTO' : 'MANUAL'}
+                      </span>
+                      <span className="font-bold text-slate-400">{(b.sizeBytes / 1024).toFixed(0)} KB</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>

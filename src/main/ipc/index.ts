@@ -355,6 +355,9 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   });
 
   ipcMain.handle('license:switchProfile', async (_e, profileType) => {
+    if (storeConfigService.isStoreProvisioned()) {
+      throw new Error('This terminal is locked to its licensed business profile. Profile conversion requires an authorized developer cryptographic upgrade package.');
+    }
     return licenseService.switchProfile(profileType);
   });
 
@@ -385,6 +388,19 @@ export function registerIpcHandlers(mainWindow: BrowserWindow): void {
   ipcMain.handle('backup:restoreBackup', async (_e, { backupPath, token }) => {
     const session = requireSession(token);
     return backupService.restoreBackup(backupPath, session);
+  });
+
+  ipcMain.handle('backup:getBackupsSummary', async () => {
+    return backupService.getBackupsSummary();
+  });
+
+  ipcMain.handle('backup:openFolder', async () => {
+    const summary = backupService.getBackupsSummary();
+    if (summary.backupsDir && fs.existsSync(summary.backupsDir)) {
+      await shell.openPath(summary.backupsDir);
+      return true;
+    }
+    return false;
   });
 
   // System info
